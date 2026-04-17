@@ -1,0 +1,34 @@
+# 编译产物
+build/
+devel/
+install/
+logs/
+
+# ROS catkin tools
+.catkin_tools/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ROS
+*.bag
+*.bag.lock
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
+*.orig
