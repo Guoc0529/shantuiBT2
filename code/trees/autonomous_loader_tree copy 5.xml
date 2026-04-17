@@ -1,0 +1,504 @@
+<?xml version="1.0"?>
+<!-- 1. 抖料机制带加入 2. 任务取消机制（按道理应该是调度取消任务后，目前正在做的动作全部停止，状态机重新初始化 3. 铲完料的时候发送累积点云） -->
+<root BTCPP_format="4" main_tree_to_execute="AutonomousLoaderTree">
+
+    <BehaviorTree ID="SafeNavigate">
+        <Sequence>
+            <RetryUntilSuccessful num_attempts="-1">
+                <Sequence>
+                    <Sequence>
+                        <ResetNavigationArrived/>
+                        <ResetDistanceToGoal/>
+                        <ResetDistanceReduction/>
+                        <ResetPlanningFeedback/>
+                        <SendNavigationGoal goal="{goal}" status="{status}"/>
+                    </Sequence>
+
+                    <Fallback>
+                        <Sequence>
+                            <WaitForPlanningFeedback timeout="300"/>
+                            <WaitForNavigationResult
+                                success="{success}"
+                                final_distance_error="{dist_error}"
+                                final_angle_error="{angle_error}"
+                                error_code="{error_code}"
+                                error_msg="{error_msg}"/>
+                        </Sequence>
+                        <Sequence>
+                            <RequestManualIntervention message="Path planning failed or timed out."/>
+                            <Fallback>
+                            <!-- 人工介入正常路径 -->
+                                <WaitForManualIntervention/>
+                            <!-- 新业务打断防止陷入无尽循环 -->
+                                <Sequence>
+                                    <CheckEndTask/>
+                                    <AlwaysFailure/>
+                                </Sequence>
+                            </Fallback>
+                            <AlwaysFailure/>
+                        </Sequence>
+                    </Fallback>
+
+                    <Fallback>
+
+                        <!-- 已成功 -->
+                        <BlackboardCheck key="success" expected="true"/>
+
+                        <!-- 可恢复错误：继续 retry -->
+                        <Sequence>
+                            <CheckErrorCode error_code="{error_code}" recoverable_codes="102,103,104"/>
+                            <AlwaysFailure/>
+                        </Sequence>
+
+                        <!-- 半可恢复：先撤回 park -->
+                        <!-- <Sequence>
+                            <SetGoalToParking goal="{park_goal}"/>
+                            <SubTree ID="SafeNavigate" goal="{park_goal}" status="2"/>
+                            <AlwaysFailure/>
+                        </Sequence> -->
+
+                        <!-- 真不可恢复：人工 -->
+                        <Sequence>
+                            <RequestManualIntervention message="{error_msg}"/>
+
+                            <Fallback>
+                                <WaitForManualIntervention/>
+                                <Sequence>
+                                    <CheckEndTask/>
+                                    <AlwaysFailure/>
+                                </Sequence>
+                            </Fallback>
+
+                            <AlwaysFailure/>
+                        </Sequence>
+
+                    </Fallback>
+
+
+                    <Fallback>
+                        <Inverter>
+                            <CheckNavStatus status="{status}" expected="1"/>
+                        </Inverter>
+                        <Fallback>
+                            <CheckArrivalQuality distance_error="{dist_error}" angle_error="{angle_error}"/>
+                            <Sequence>
+                                <RequestManualIntervention message="Dumping arrival quality is poor. Please intervene."/>
+
+                                <Fallback>
+
+                                    <!-- 人工确认窗口 -->
+                                    <WaitForManualIntervention/>
+
+                                    <!-- 超时自动撤回 -->
+                                    <!-- <Sequence>
+                                        <Sleep msec="10000"/>
+                                        <SetGoalToParking goal="{park_goal}"/>
+                                        <SubTree ID="SafeNavigate" goal="{park_goal}" status="2"/>
+                                        <AlwaysFailure/>
+                                    </Sequence> -->
+
+                                </Fallback>
+                            </Sequence>
+
+                        </Fallback>
+                    </Fallback>
+                </Sequence>
+            </RetryUntilSuccessful>
+        </Sequence>
+    </BehaviorTree>
+
+    <BehaviorTree ID="AutonomousLoaderTree">
+        <ReactiveFallback name="ROOT">
+
+            <Sequence name="SEQ_CANCEL_TASK">
+
+                <!-- 调度下发 taskid=0 -->
+                <CheckCancelTask/>
+
+                <!-- 立即停导航 / 停动作 -->
+                <CancelNavigation/>
+                <CancelArmBucketAction/>
+
+                <!-- 清理状态 -->
+                <ResetPlanningFeedback/>
+                <ResetNavigationArrived/>
+                <ResetDistanceToGoal/>
+                <ResetDistanceReduction/>
+                <ClearCurrentTask/>
+
+                <!-- 回到刚启动状态 -->
+                <SetWorkState value="0"/>
+
+                <UpdateTaskProgress
+                    phase="canceled"
+                    progress="0.0"
+                    message="Task canceled by scheduler, system reset"/>
+
+            </Sequence>
+
+
+            <Sequence name="SEQ_STOP">
+                <CheckEndTask/>
+                <CheckEndTaskAfterCycle/>
+                <CommitToEndMission/>
+                <SetGoalToParking goal="{parking_goal}"/>
+                <SubTree ID="SafeNavigate" goal="{parking_goal}" status="2"/>
+                
+                <SetArmBucketState name="SetABS_1_End" code="1"/>
+                <WaitForArmBucketCompletion name="WaitABS_1_End" timeout_s="300" message="Mission ended, resetting arm and bucket"/>
+
+                <UpdateTaskProgress name="StopProgress" phase="stopping" progress="100.0" message="Mission ended, returned to park and reset."/>
+            </Sequence>
+
+            <Sequence name="SEQ_PAUSE">
+                <CheckPauseTask name="CheckPauseTask"/>
+                <PauseNavigation name="PauseNavigation"/>
+
+                <SetWorkState value="2"/>
+
+                <UpdateTaskProgress name="PauseProgress" phase="paused" progress="0.0" message="Task paused"/>
+            </Sequence>
+
+            <Fallback name="SEL_WORK_IDLE">
+
+                <Sequence name="SEQ_TASK_LOOP">
+                    <Inverter>
+                        <BlackboardCheck key="mission_ending" expected="true"/>
+                    </Inverter>
+                    <CheckNewTask name="CheckNewTask"/>
+                    <GetAndSetCurrentTask name="GetAndSetCurrentTask"/>
+
+                    <Fallback name="FALLBACK_PREPARE_ARM_FIRST_TASK">
+                        <Sequence name="SEQ_PREPARE_ARM_IF_FIRST">
+                            <IsFirstTask name="IsFirstTask"/>
+                            <SetArmBucketState name="SetABS_2_Init" code="2"/>
+                            <WaitForArmBucketCompletion name="WaitABS_2_Init" timeout_s="300" message="Task started, preparing arm"/>
+                        </Sequence>
+                        <Sequence name="SEQ_PREPARE_ARM_IF_RESET_DONE">
+                            <CheckArmBucketDone name="WasABS1Completed" expect_code="1"/>
+                            <SetArmBucketState name="SetABS_2_Reinit" code="2"/>
+                            <WaitForArmBucketCompletion name="WaitABS_2_Reinit" timeout_s="300" message="Arm was reset (1), preparing arm"/>
+                        </Sequence>
+                        <AlwaysSuccess/>
+                    </Fallback>
+
+                    <SetWorkState value="1"/>
+
+                    <KeepRunningUntilFailure name="RepeatUntilFail">
+                        <Sequence name="SEQ_ONE_CYCLE">
+
+                            <Sequence name="SEQ_SCOOP_POINT_NAV">
+                                <UpdateTaskProgress name="UP_SCP_REQ" phase="scooping" progress="20.0" message="Requesting scoop point"/>
+                                <RequestScoopPoint name="RequestScoopPoint"/>
+
+                                <Fallback name="SEL_HANDLE_SCOOP_POINT">
+                                    <Sequence name="SEQ_ZERO_CASE">
+                                        <CheckScoopPointZero name="CheckScoopPointZero"/>
+                                        <SetGoalToBinCenter goal="{bin_center_goal}"/>
+                                        <SubTree ID="SafeNavigate" goal="{bin_center_goal}" status="0"/>
+                                        <SetPointAccumulationStart name="StartAccumulation"/>
+                                        <WaitForPointAccumulationDone name="WaitAccumulation" timeout_s="300" message="Arrived at bin center, waiting for point cloud calculation"/>
+                                        <RequestScoopPoint name="RequestScoopPoint_Again"/>
+                                    </Sequence>
+                                    <Inverter><CheckScoopPointZero/></Inverter>
+                                </Fallback>
+
+                                <SetGoalToScoopPoint goal="{scoop_point_goal}"/>
+                            </Sequence>
+
+                            <Parallel name="PARALLEL_NAV_AND_SCOOP_ACTIONS" success_count="-1" failure_count="1">
+
+                                <SubTree ID="SafeNavigate" goal="{scoop_point_goal}" status="0"/>
+
+                                <Sequence name="SEQ_SCOOP_ACTIONS_ON_APPROACH">
+                                    <Fallback>
+
+                                        <!-- 正常：规划成功 -->
+                                        <RetryUntilSuccessful num_attempts="3">
+                                            <WaitForPlanningFeedback timeout="300"/>
+                                        </RetryUntilSuccessful>
+
+                                        <!-- 规划失败：人工 → 回来重来 -->
+                                        <RetryUntilSuccessful num_attempts="-1">
+                                            <Sequence>
+                                                <RequestManualIntervention
+                                                    message="Planning to scoop failed, please intervene"/>
+                                                <WaitForManualIntervention/>
+                                                <ResetPlanningFeedback/>
+                                                <AlwaysFailure/>   <!-- 🔴 关键：触发 SafeNavigate 重发 -->
+                                            </Sequence>
+                                        </RetryUntilSuccessful>
+
+                                    </Fallback>
+
+                                    <Fallback name="FALLBACK_LOWER_ARM_LEAVING_HOPPER">
+                                        <Sequence name="SEQ_LOWER_ARM_TRANSIT">
+                                            <Inverter>
+                                                <IsFirstTask/>
+                                            </Inverter>
+                                            <CheckDistanceFromLastHopper distance_gt="9.0"/>
+                                            
+                                            <Inverter>
+                                                <CheckArmBucketDone expect_code="3"/>
+                                            </Inverter>
+                                            
+                                            <SetArmBucketState code="5"/>
+                                            <WaitForArmBucketCompletion timeout_s="300" message="Leaving hopper (>7m), lowering arm"/>
+                                        </Sequence>
+                                        <AlwaysSuccess/>
+                                    </Fallback>
+
+                                    <Fallback>
+
+                                        <!-- 已经完成下臂，直接通过 -->
+                                        <CheckArmBucketDone expect_code="3"/>
+
+                                        <!-- 未完成才执行 -->
+                                        <Sequence>
+                                            <CheckDistanceThreshold threshold_name="lower_bucket_distance"/>
+                                            <SetArmBucketState code="3"/>
+                                            <WaitForArmBucketCompletion
+                                                timeout_s="300"
+                                                message="Approaching scoop point, lowering bucket"/>
+                                        </Sequence>
+
+                                    </Fallback>
+
+
+                                    <Fallback>
+                                        <CheckArmBucketDone expect_code="7"/>
+                                        <Sequence>
+                                            <WaitForNavigationArrival message="Waiting nav arrival to scoop"/>
+                                            <SetArmBucketState code="7"/>
+
+                                            <Fallback>
+
+                                                <!-- 正常完成 -->
+                                                <WaitForArmBucketCompletion
+                                                    timeout_s="300"
+                                                    message="Arrived at scoop point, scooping"/>
+
+                                                <!-- 失败：停车 + 人工 -->
+                                                <Sequence>
+                                                    <!-- <PauseNavigation/> -->
+                                                    <!-- 加入ESTOP -->
+                                                    <RequestManualIntervention
+                                                        message="Scooping action failed, vehicle stopped"/>
+                                                    <WaitForManualIntervention/>
+                                                    <AlwaysFailure/>
+                                                </Sequence>
+
+                                            </Fallback>
+                                        </Sequence>
+
+                                    </Fallback>
+                                    <AlwaysSuccess/>
+                                </Sequence>
+
+                            </Parallel>
+
+                            <Sequence name="SEQ_DUMP">
+                                <UpdateTaskProgress name="UP_DUMP_START" phase="dumping" progress="60.0" message="Dumping phase: Navigating to hopper"/>
+                                <SetGoalToHopper goal="{hopper_goal}"/>
+
+                                <StartPointAccumulation/>
+                                
+                                <Parallel name="PARALLEL_DUMP_NAV_AND_MANAGE_ACCUMULATION"
+                                        success_count="-1"
+                                        failure_count="1">
+
+                                    <Parallel name="PARALLEL_DUMP_NAV_AND_RAISE"
+                                            success_count="-1"
+                                            failure_count="1">
+
+                                    <!-- ========= A. 导航主线 ========= -->
+                                    <RetryUntilSuccessful num_attempts="-1">
+                                        <Sequence>
+
+                                            <!-- 发送导航 -->
+                                            <SubTree ID="SafeNavigate" goal="{hopper_goal}" status="1"/>
+
+                                        </Sequence>
+                                    </RetryUntilSuccessful>
+
+
+                                    <!-- ========= B. 抬臂控制线 ========= -->
+                                    <Sequence name="SEQ_RAISE_ARM_ON_APPROACH">
+
+                                        <!-- Step 1: 等规划成功（失败最多 3 次） -->
+                                        <Fallback>
+
+                                            <!-- 规划成功 -->
+                                            <RetryUntilSuccessful num_attempts="3">
+                                                <WaitForPlanningFeedback timeout="300"/>
+                                            </RetryUntilSuccessful>
+
+                                            <!-- 规划失败 → 人工 → 回来继续 -->
+                                            <RetryUntilSuccessful num_attempts="-1">
+                                                <Sequence>
+                                                    <!-- <PauseNavigation/> -->
+                                                    <!-- 可以加急停 -->
+                                                    <RequestManualIntervention message="Planning to hopper failed, please intervene"/>
+                                                    <WaitForManualIntervention/>
+                                                    <ResetPlanningFeedback/>
+                                                    <AlwaysFailure/>   <!-- 🔴 关键 -->
+                                                </Sequence>
+                                            </RetryUntilSuccessful>
+
+                                        </Fallback>
+
+                                        <!-- Step 2: 到距离才允许抬臂 -->
+                                        <CheckDistanceThreshold threshold_name="raise_arm_distance"/>
+
+                                        <!-- Step 3: 抬臂 -->
+                                        <SetArmBucketState code="4"/>
+
+                                        <!-- Step 4: 抬臂结果监控（失败就停车 + 人工） -->
+                                        <Fallback>
+
+                                            <!-- 正常完成 -->
+                                            <WaitForArmBucketCompletion timeout_s="300"
+                                                message="Approaching hopper, raising arm"/>
+
+                                            <!-- 抬臂无回令 / 超时 -->
+                                            <RetryUntilSuccessful num_attempts="-1">
+                                                <Sequence>
+                                                    <!-- <PauseNavigation/> -->
+                                                    <!-- 可以加急停 -->
+                                                    <RequestManualIntervention message="Arm raise timeout, vehicle stopped"/>
+                                                    <WaitForManualIntervention/>
+                                                </Sequence>
+                                            </RetryUntilSuccessful>
+
+                                        </Fallback>
+
+                                    </Sequence>
+
+                                    </Parallel>
+
+                                    <Sequence name="SEQ_STOP_ACCUMULATION_ON_DISTANCE">
+                                        <CheckDistanceSinceScoop distance_gt="5.0"/>
+                                        <StopPointAccumulation/>
+                                    </Sequence>
+
+                                </Parallel>
+
+
+                                <Sequence name="SEQ_DUMP_ON_ARRIVAL">
+                                    <SetArmBucketState name="SetABS_6" code="6"/>
+                                    <WaitForArmBucketCompletion name="WaitABS_6" timeout_s="300" message="Arrived at hopper, executing dump"/>
+
+                                    <SetWorkState value="4"/>
+
+                                </Sequence>
+
+                            </Sequence>
+
+                            <Sequence name="SEQ_AFTER_DUMP_WAIT_AND_DECIDE">
+
+                                <SetWorkState value="4"/>
+
+                                <!-- 等待新任务：最多 10 秒 -->
+                                <Fallback name="WAIT_NEW_TASK_OR_TIMEOUT">
+
+                                    <!-- ===== 情况 1：新任务随时来，立刻成功 ===== -->
+                                    <Sequence>
+                                        <CheckNewTask/>
+                                        <AlwaysSuccess/>
+                                    </Sequence>
+
+                                    <!-- ===== 情况 2：10 秒超时，明确失败 ===== -->
+                                    <Sequence>
+
+                                        <Repeat num_cycles="10">
+                                            <Sequence>
+                                                <Inverter>
+                                                    <CheckNewTask/>
+                                                </Inverter>
+                                                <Sleep msec="1000"/>
+                                            </Sequence>
+                                        </Repeat>
+                                        <AlwaysSuccess/>
+
+                                    </Sequence>
+
+                                </Fallback>
+
+                                <Fallback name="FALLBACK_NEW_TASK_OR_PARK">
+
+                                    <!-- ===== 有新任务 ===== -->
+                                    <Sequence>
+                                        <CheckNewTask/>
+                                        <SetWorkState value="1"/>
+                                        <GetAndSetCurrentTask/>
+                                        <RequestScoopPoint/>
+                                        <AlwaysSuccess/>
+                                    </Sequence>
+
+                                    <!-- ===== 没新任务 → park（一定能进） ===== -->
+                                    <Sequence>
+                                        <SetGoalToParking goal="{park_goal}"/>
+                                        <SubTree ID="SafeNavigate" goal="{park_goal}" status="2"/>
+
+                                        <SetArmBucketState code="1"/>
+                                        <WaitForArmBucketCompletion
+                                            timeout_s="300"
+                                            message="Returning to park, resetting arm and bucket"/>
+                                        <SetWorkState value="0"/>
+                                        <AlwaysFailure/>
+                                    </Sequence>
+
+                                </Fallback>
+
+                            </Sequence>
+
+                            <!-- <Fallback name="FALLBACK_AFTER_DUMP">
+                                <Sequence name="SEQ_HAS_NEXT_TASK">
+                                    <CheckForNextCycle name="CheckForNextCycle"/>
+                                    <GetAndSetCurrentTask name="GetNextTask"/>
+                                    <RequestScoopPoint name="RequestNextScoopPoint"/>
+                                </Sequence>
+
+                                <Sequence name="SEQ_WAIT_FOR_NEW_TASK_AND_CONTINUE">
+
+                                    <SetWorkState value="4"/>
+                                    <RetryUntilSuccessful num_attempts="10">
+                                        <Sequence>
+                                            <CheckNewTask/>
+                                            <Sleep msec="1000"/>
+                                        </Sequence>
+                                    </RetryUntilSuccessful>
+                                    <SetWorkState value="1"/>
+                                    <GetAndSetCurrentTask name="GetNewTaskAfterWait"/>
+                                    <RequestScoopPoint name="RequestScoopPointAfterWait"/>
+                                </Sequence>
+
+                                <Sequence name="SEQ_GO_TO_PARK">
+                                    <Parallel name="PARALLEL_NAV_AND_LOWER_ARM_PARK" success_count="-1" failure_count="1">
+                                        <Sequence name="SEQ_NAV_TO_PARK">
+                                            <SetGoalToParking goal="{park_goal}"/>
+                                            <SubTree ID="SafeNavigate" goal="{park_goal}" status="2"/>
+                                            <SetArmBucketState name="SetABS_1_Park" code="1"/>
+                                            <WaitForArmBucketCompletion name="WaitABS_1_Park" timeout_s="0" message="Arrived at park, resetting arm and bucket (code=1)"/>
+                                            <SetWorkState value="0"/>
+                                            <AlwaysFailure/>
+                                        </Sequence>
+                                        <Sequence name="SEQ_LOWER_ARM_WHILE_NAV_PARK">
+                                            <CheckDistanceFromLastHopper distance_gt="9.0"/>
+                                            <SetArmBucketState code="5"/>
+                                            <WaitForArmBucketCompletion message="Lowering arm while returning to park"/>
+                                        </Sequence>
+                                    </Parallel>
+                                </Sequence>
+                            </Fallback> -->
+                        </Sequence>
+                    </KeepRunningUntilFailure>
+                </Sequence>
+
+                <UpdateTaskProgress name="IdleStatus" phase="idle" progress="100.0" message="Idle, waiting for tasks"/>
+            </Fallback>
+
+        </ReactiveFallback>
+    </BehaviorTree>
+
+</root>
