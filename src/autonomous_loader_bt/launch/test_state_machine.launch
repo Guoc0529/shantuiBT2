@@ -1,0 +1,19 @@
+<launch>
+  <!-- Enable more verbose console logging for quick debugging -->
+  <arg name="enable_console_logging" default="true" />
+  <arg name="tree_file" default="autonomous_loader_tree.xml" />
+  <arg name="config_file" default="loader_config.yaml" />
+  <arg name="allow_task_preemption" default="false" />
+
+  <!-- Behavior Tree node (private namespace with name autonomous_loader_bt_node) -->
+  <node pkg="autonomous_loader_bt" type="autonomous_loader_bt_node" name="autonomous_loader_bt_node" output="screen">
+    <param name="enable_console_logging" value="$(arg enable_console_logging)" />
+    <param name="tree_file" value="$(arg tree_file)" />
+    <param name="config_file" value="$(arg config_file)" />
+    <param name="allow_task_preemption" value="$(arg allow_task_preemption)" />
+  </node>
+
+  <!-- Dummy Navigate Action Server + Param Emulators + Task feeder -->
+  <node pkg="autonomous_loader_bt" type="test_state_machine.py" name="bt_state_machine_test" output="screen" />
+</launch>
+

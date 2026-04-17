@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="tree_file" default="autonomous_loader_tree.xml" doc="行为树XML文件名称"/>
+  <arg name="loop_rate" default="10.0" doc="行为树执行频率 (Hz)"/>
+  <arg name="enable_logging" default="true" doc="是否启用日志记录"/>
+  <arg name="log_file" default="autonomous_loader_logs.btlog" doc="日志文件名"/>
+  <arg name="enable_rviz" default="false" doc="是否启动RViz可视化"/>
+  <arg name="enable_groot2" default="false" doc="是否启用Groot2监控"/>
+  <arg name="groot2_port" default="1666" doc="Groot2 ZMQ发布端口"/>
+  <arg name="package_root" default="$(find autonomous_loader_bt)" doc="包根目录路径（用于定位trees和config目录）"/>
+  <arg name="allow_task_preemption" default="false" doc="是否允许新任务在执行过程中抢占（默认不允许）"/>
+  
+  <node name="autonomous_loader_bt_node" 
+        pkg="autonomous_loader_bt" 
+        type="autonomous_loader_bt_node" 
+        output="screen">
+    
+    <param name="tree_file" value="$(arg tree_file)"/>
+    <param name="tree_loop_rate" value="$(arg loop_rate)"/>
+    <param name="enable_logging" value="$(arg enable_logging)"/>
+    <param name="log_file" value="$(arg log_file)"/>
+    <param name="package_root" value="$(arg package_root)"/>
+    <param name="enable_groot2" value="$(arg enable_groot2)"/>
+    <param name="groot2_port" value="$(arg groot2_port)"/>
+    
+    <remap from="cmd_vel" to="/cmd_vel"/>
+    <remap from="move_base_simple/goal" to="/move_base_simple/goal"/>
+  </node>
+  
+  <node if="$(arg enable_rviz)" 
+        name="rviz" 
+        pkg="rviz" 
+        type="rviz" 
+        args="-d $(find autonomous_loader_bt)/config/autonomous_loader.rviz"/>
+  
+  <node name="loader_bt_test_node" 
+        pkg="autonomous_loader_bt" 
+        type="loader_bt_test_node.py" 
+        output="screen"
+        if="false"/>
+  
+</launch>

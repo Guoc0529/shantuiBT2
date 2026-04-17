@@ -1,0 +1,4 @@
+uint8 pileID
+---
+geometry_msgs/Pose pose_output
+

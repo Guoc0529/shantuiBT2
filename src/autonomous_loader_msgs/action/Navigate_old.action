@@ -1,0 +1,31 @@
+# Goal
+geometry_msgs/PoseStamped end_pose
+uint8 last_status     # 0=铲料, 1=卸料, 2=其他
+uint8 current_status  # 0=铲料, 1=卸料, 2=其他
+---
+# Result
+bool plan_succeeded       # 是否规划成功
+bool reached_goal         # 是否到达目标点位
+uint16 error_code         # 错误码 (使用上述常量赋值)
+string error_msg             # 错误描述信息 (用于日志打印或上位机显示)
+float64 final_distance_error # 到达时的最终距离误差
+float64 final_angle_error    # 到达时的最终角度误差
+---
+# Feedback
+float64 distance_to_goal  # 距离目标（米）
+#float64 path_deviation_distance # 路径偏离距离
+#float64 path_deviation_angle  # 路径偏离角度
+
+
+
+# Result
+#bool plan_succeeded       # 是否规划成功
+bool success               # 是否到达目标点位
+float64 final_distance_error  # 到达时的最终距离误差
+float64 final_angle_error # 到达时的最终角度误差
+uint8 error_code          # 错误代码
+string error_msg          # 错误信息
+---
+# Feedback
+float64 distance_to_goal  # 距离目标（米）
+bool plan_succeeded       # 是否规划成功

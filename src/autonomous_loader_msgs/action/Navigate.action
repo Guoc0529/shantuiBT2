@@ -1,0 +1,17 @@
+# Goal
+geometry_msgs/PoseStamped end_pose
+uint8 last_status     # 0=铲料, 1=卸料, 2=其他
+uint8 current_status  # 0=铲料, 1=卸料, 2=其他
+uint8 last_id         # 上一个铲料/卸料id
+uint8 current_id      # 当前铲料/卸料id
+---
+# Result
+bool success               # 是否成功到达目标点位
+uint8 error_code             # 错误码 (0 表示成功)
+string error_msg             # 最终结果的描述信息
+float64 final_distance_error # 到达时的最终距离误差
+float64 final_angle_error    # 到达时的最终角度误差
+---
+# Feedback
+bool plan_succeeded       # 是否规划成功 (在导航开始时立即反馈)
+float64 distance_to_goal  # 距离目标（米）

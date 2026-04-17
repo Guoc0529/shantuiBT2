@@ -1,0 +1,10 @@
+# ObstacleInfo.msg
+float64 x
+float64 y
+float64 z
+float64 yaw
+float64 length
+float64 width
+float64 height  
+bool inrange
+int32 classid

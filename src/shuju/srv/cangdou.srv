@@ -1,0 +1,5 @@
+int8 taskID
+int8 cang
+int8 dou
+---
+bool huiying

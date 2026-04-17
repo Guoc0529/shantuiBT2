@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 自主装载机器人行为树启动文件 -->
+  
+  <!-- 参数设置 -->
+  <arg name="tree_file" default="autonomous_loader_tree.xml" doc="行为树XML文件名称"/>
+  <arg name="loop_rate" default="10.0" doc="行为树执行频率 (Hz)"/>
+  <arg name="enable_logging" default="true" doc="是否启用日志记录"/>
+  <arg name="log_file" default="autonomous_loader_logs.btlog" doc="日志文件名"/>
+  <arg name="enable_rviz" default="false" doc="是否启动RViz可视化"/>
+  
+  <!-- 启动自主装载机器人行为树节点 -->
+  <node name="autonomous_loader_bt_node" 
+        pkg="autonomous_loader_bt" 
+        type="autonomous_loader_bt_node" 
+        output="screen">
+    
+    <!-- 参数传递 -->
+    <param name="tree_file" value="$(arg tree_file)"/>
+    <param name="tree_loop_rate" value="$(arg loop_rate)"/>
+    <param name="enable_logging" value="$(arg enable_logging)"/>
+    <param name="log_file" value="$(arg log_file)"/>
+    
+    <!-- 话题重映射 -->
+    <remap from="cmd_vel" to="/cmd_vel"/>
+    <remap from="move_base_simple/goal" to="/move_base_simple/goal"/>
+  </node>
+  
+  <!-- 可选：启动RViz进行可视化 -->
+  <node if="$(arg enable_rviz)" 
+        name="rviz" 
+        pkg="rviz" 
+        type="rviz" 
+        args="-d $(find autonomous_loader_bt)/config/autonomous_loader.rviz"/>
+  
+  <!-- 可选：启动测试节点用于发送指令 -->
+  <node name="loader_bt_test_node" 
+        pkg="autonomous_loader_bt" 
+        type="loader_bt_test_node.py" 
+        output="screen"
+        if="false"/>
+  
+</launch>
