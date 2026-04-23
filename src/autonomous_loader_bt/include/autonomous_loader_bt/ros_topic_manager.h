@@ -54,6 +54,9 @@ public:
         // Publisher for the current navigation goal
         goal_publisher_ = nh.advertise<geometry_msgs::PoseStamped>("/bt_navigation/current_goal", 1, true); // Latching publisher
         
+        // Publisher for action status messages
+        action_status_pub_ = nh.advertise<std_msgs::String>("/bt_action/status", 10, true);
+        
         // Action client for custom navigation
         std::string action_name;
         nh_.param<std::string>("navigate_action_name", action_name, std::string("/navigate"));
@@ -63,6 +66,14 @@ public:
         ROS_INFO("%s action server connected.", action_name.c_str());
         
         ROS_INFO("ROS Topic Manager initialized.");
+    }
+
+    void publishActionStatus(const std::string& message)
+    {
+        std_msgs::String msg;
+        msg.data = message;
+        action_status_pub_.publish(msg);
+        ROS_INFO("[BT_ACTION] %s", message.c_str());
     }
 
     // Callbacks for wiring feedback to GlobalState
@@ -174,6 +185,7 @@ private:
     ros::NodeHandle nh_;
     ros::ServiceClient spading_pose_client_;
     ros::Publisher goal_publisher_; // Publisher for the current navigation goal
+    ros::Publisher action_status_pub_; // Publisher for action status messages
     std::unique_ptr<NavigateClient> nav_client_;
     geometry_msgs::PoseStamped last_goal_;
 

@@ -121,6 +121,10 @@ public:
     bool wasPlanningSuccessful() const;
     void resetPlanningFeedback();
     
+    // Arm/Bucket action code APIs
+    void setArmBucketCode(int code);
+    int getArmBucketCode() const;
+    
 private:
     GlobalState() = default;
     mutable std::mutex mutex_;
@@ -153,6 +157,9 @@ private:
     // Planning feedback from Navigate.action
     bool planning_feedback_received_ = false;
     bool planning_successful_ = false;
+    
+    // Arm/Bucket action code
+    int arm_bucket_code_ = 0;
 };
 
 // ========== 条件节点 ==========
