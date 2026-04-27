@@ -63,6 +63,9 @@ public:
         auto& topic_manager = autonomous_loader_bt::ROSTopicManager::getInstance();
         topic_manager.initialize(nh_);
 
+        // 初始化任务状态上报器
+        autonomous_loader_bt::TaskStatusReporter::instance().init(nh_);
+
         // 将Action的反馈连接到GlobalState
         topic_manager.setDistanceUpdateCallback([](double dist){
             auto& gs = autonomous_loader_bt::GlobalState::getInstance();
@@ -238,16 +241,21 @@ private:
 
     void executeTree(const ros::TimerEvent&)
     {
+        static int tick_count = 0;
+        tick_count++;
         try {
             BT::NodeStatus status = tree_.tickOnce();
+            if (tick_count % 100 == 0) {  // Every 10 seconds (100 ticks at 10Hz)
+                ROS_INFO_THROTTLE(10.0, "[BT_ROOT] Still running, tick #%d", tick_count);
+            }
             publishStatus(status);
-            // publishWorkState(status);     
-            
+            // publishWorkState(status);
+
             // This logic is now handled in the Behavior Tree XML
             // if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
             //     tree_.haltTree();
             // }
-            
+
         } catch (const std::exception& e) {
             ROS_ERROR("Error executing behavior tree: %s", e.what());
         }
@@ -338,6 +346,8 @@ private:
             topic_manager.sendMoveBaseGoal(parking_goal, autonomous_loader_bt::NavigationStatus::OTHER, current_id, last_id);
             tree_.haltTree();
             gs.clearTasks();
+            gs.setTaskId(-1);
+            autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(-1);
             ROS_INFO("Sent new navigation goal to parking spot and halted BT (topic).");
             return;
         }
@@ -345,6 +355,8 @@ private:
         ROS_INFO("Received start task command - Task ID: %d, Bin: %d, Hopper: %d", msg->task_id, msg->bin_id, msg->hopper_id);
         autonomous_loader_bt::Task task(msg->task_id, msg->bin_id, msg->hopper_id, msg->task_type);
         autonomous_loader_bt::GlobalState::getInstance().addTask(task);
+        autonomous_loader_bt::GlobalState::getInstance().setTaskId(msg->task_id);
+        autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(msg->task_id);
 
         nh_.setParam("ArmBucketState", 2);
         ROS_INFO("Set param ArmBucketState=2 (prepare raise arm)");
@@ -389,6 +401,8 @@ private:
             // Also halt the behavior tree to prevent conflicts
             tree_.haltTree();
             gs.clearTasks();
+            gs.setTaskId(-1);
+            autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(-1);
 
             ROS_INFO("Sent new navigation goal to parking spot and halted BT.");
             res.huiying = true;
@@ -398,6 +412,8 @@ private:
         ROS_INFO("Received service task: taskID=%d, bin=%d, hopper=%d", req.taskID, req.cang, req.dou);
         autonomous_loader_bt::Task task(req.taskID, req.cang, req.dou, "scoop");
         autonomous_loader_bt::GlobalState::getInstance().addTask(task);
+        autonomous_loader_bt::GlobalState::getInstance().setTaskId(req.taskID);
+        autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(req.taskID);
 
         nh_.setParam("canggoal", static_cast<int>(req.cang));
         res.huiying = true;

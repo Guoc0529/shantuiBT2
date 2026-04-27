@@ -1,6 +1,0 @@
-<launch>
-    <!-- Start the obstacle avoider node -->
-    <rosparam file="$(find obstacle_avoider)/config/params.yaml" command="load"/>
-    <node name="obstacle_avoider_node" pkg="obstacle_avoider" type="obstacle_avoider_node" output="screen"/>
-</launch>
-

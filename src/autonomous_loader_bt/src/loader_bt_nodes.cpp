@@ -305,6 +305,16 @@ void GlobalState::setCancelTask(bool cancel)
     cancel_task_ = cancel;
 }
 
+void GlobalState::setTaskId(int task_id)
+{
+    current_task_id_.store(task_id);
+}
+
+int GlobalState::getTaskIdInt() const
+{
+    return current_task_id_.load();
+}
+
 bool GlobalState::isPauseTask() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -584,7 +594,9 @@ BT::NodeStatus CheckEndTaskAfterCycle::tick()
 
 BT::NodeStatus CheckNewTask::tick()
 {
-    return GlobalState::getInstance().hasNewTask() ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+    bool has_task = GlobalState::getInstance().hasNewTask();
+    ROS_INFO_THROTTLE(2.0, "[BT_DEBUG] CheckNewTask: hasNewTask=%d", has_task);
+    return has_task ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::NodeStatus CheckNavigationArrived::tick()
@@ -726,7 +738,15 @@ BT::NodeStatus SetWorkState::tick()
         return BT::NodeStatus::FAILURE;
     }
     ros::param::set("/workstate", value);
-    ROS_INFO("[BT] Set /workstate parameter to %d", value);
+
+    // 调用状态上报模块
+    int task_id_int = autonomous_loader_bt::GlobalState::getInstance().getTaskIdInt();
+    autonomous_loader_bt::TaskStatusReporter::instance().setState(value);
+    if (task_id_int > 0) {
+        autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(task_id_int);
+    }
+
+    ROS_INFO("[BT] Set /workstate to %d", value);
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -840,15 +860,15 @@ BT::NodeStatus WaitForArmBucketCompletion::onRunning()
             int code = GlobalState::getInstance().getArmBucketCode();
             std::string status_msg;
             switch(code) {
-                case 1: status_msg = "铲斗放平到地面完成"; break;
-                case 2: status_msg = "铲斗抬到运输位置完成"; break;
-                case 3: status_msg = "铲斗放平完成"; break;
-                case 4: status_msg = "举升大臂完成"; break;
-                case 5: status_msg = "降大臂完成"; break;
-                case 6: status_msg = "卸料完成"; break;
-                case 7: status_msg = "铲料完成"; break;
-                case 8: status_msg = "抖料完成"; break;
-                default: status_msg = "臂铲动作完成"; break;
+                case 1: status_msg = "1: Bucket lowered to ground"; break;
+                case 2: status_msg = "2: Bucket lifted to transport position"; break;
+                case 3: status_msg = "3: Bucket leveled"; break;
+                case 4: status_msg = "4: Boom lifted"; break;
+                case 5: status_msg = "5: Boom lowered"; break;
+                case 6: status_msg = "6: Material unloading done"; break;
+                case 7: status_msg = "7: Shoveling done"; break;
+                case 8: status_msg = "8: Shaking done"; break;
+                default: status_msg = "0: Arm/bucket operation done"; break;
             }
             ROSTopicManager::getInstance().publishActionStatus(status_msg);
             
@@ -933,13 +953,19 @@ void WaitForPointAccumulationDone::onHalted() {}
 
 BT::NodeStatus RequestScoopPoint::tick()
 {
+    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] RequestScoopPoint tick called");
+    
     auto& state = GlobalState::getInstance();
     uint8_t pileID = static_cast<uint8_t>(state.getCurrentTask().bin_id);
-    uint8_t hopperID = static_cast<uint8_t>(state.getCurrentTask().hopper_id);
+    // uint8_t hopperID = static_cast<uint8_t>(state.getCurrentTask().hopper_id);
     geometry_msgs::PoseStamped scoop_point;
     auto& topic_manager = ROSTopicManager::getInstance();
     
-    if (topic_manager.requestScoopPoint(pileID, scoop_point)) {
+    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] Requesting scoop point for pileID=%d", pileID);
+    bool success = topic_manager.requestScoopPoint(pileID, scoop_point);
+    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] requestScoopPoint returned: %d", success);
+    
+    if (success) {
         if (std::abs(scoop_point.pose.position.x) > 1e-3 || std::abs(scoop_point.pose.position.y) > 1e-3) {
             scoop_point.pose.position.x -= 1.0;
         }

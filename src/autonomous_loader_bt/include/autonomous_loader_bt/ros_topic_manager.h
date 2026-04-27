@@ -73,7 +73,7 @@ public:
         std_msgs::String msg;
         msg.data = message;
         action_status_pub_.publish(msg);
-        ROS_INFO("[BT_ACTION] %s", message.c_str());
+        ROS_INFO_STREAM("[BT_ACTION] " << message);
     }
 
     // Callbacks for wiring feedback to GlobalState

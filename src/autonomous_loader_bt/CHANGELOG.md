@@ -160,3 +160,241 @@ struct OrientedRect {
 | 障碍物质心在车内但角落未接触 | 触发 | 触发（正确） |
 | 障碍物角落靠近但质心较远 | 不触发（漏报） | 触发（正确） |
 | 障碍物靠近但未接触 | 触发（误报） | 不触发（正确） |
+
+---
+
+## 2026-04-27: 统一障碍物距离判断（全部使用最小距离）
+
+### 需求
+所有障碍物与车之间的距离判断，统一使用"车辆旋转矩形 ↔ 障碍物"的最小距离作为判断基准，消除判断逻辑分裂，提升安全性和准确性。
+
+### 修改文件
+
+#### `src/obstacle_avoider/src/obstacle_avoider_node.cpp`
+
+**新增结构体:**
+```cpp
+// 安全判断阈值（统一参数管理）
+struct SafetyThresholds {
+    double body_proximity;       // 车身边界触发阈值
+    double path_corridor;        // 路径走廊宽度
+    double human_alert_distance; // 行人预警距离
+};
+```
+
+**新增辅助函数:**
+
+| 函数 | 用途 |
+|------|------|
+| `minDistanceBetweenRects()` | 两旋转矩形间的最小距离（角点到线段） |
+| `minDistancePointToRect()` | 点到旋转矩形的最小距离（用于质心障碍物） |
+| `rectsAABBOverlap()` | 轴对齐包围盒预检 |
+
+**新增方法:**
+
+| 方法 | 用途 |
+|------|------|
+| `isOnPath<T>()` | 障碍物全局坐标是否在路径走廊内 |
+| `computeMinDistance<T>()` | 统一接口：计算障碍物到车辆的最小距离 |
+| `isInFront<T>()` | 判断障碍物是否在车辆正前方 |
+
+**核心变更 — `processObstacle<T>()` 统一逻辑:**
+
+```
+遍历障碍物
+    ↓
+跳过条件（臂举升 / 料场点云）
+    ↓
+计算最小距离 = minDistance(vehicle_rect, obstacle)
+    ↓
+Rule B: 最小距离 ≤ body_proximity (0=重叠) → 急停
+    ↓
+Rule A: 在路径走廊内
+    ├── 行人 + 距离<20m → 鸣笛+急停
+    └── 其他 → 急停
+```
+
+**计算方式统一:**
+
+| 障碍物类型 | 判断方式 | 几何模型 |
+|-----------|---------|---------|
+| `PerceptInfo.obstacles` | 质心→车辆矩形最近点 | 点到旋转矩形 |
+| `OriginObs` | 质心→车辆矩形最近点 | 点到旋转矩形 |
+| `jsk_bboxes` | 矩形间最小距离 | 旋转矩形↔旋转矩形 |
+
+#### `src/obstacle_avoider/config/params.yaml`
+
+**新增参数:**
+```yaml
+# --- 安全判断阈值（基于最小距离）---
+safety_thresholds:
+  body_proximity: 0.0     # 障碍物进入车身矩形就算重叠（=0表示精确碰撞检测）
+  path_corridor: 1.0      # 路径两侧走廊宽度（每侧1m）
+  human_alert_distance: 20.0  # 行人预警距离
+```
+
+**参数变更:**
+
+| 参数 | 修改前 | 修改后 |
+|------|--------|--------|
+| `vehicle_model.width` | 3.0 | 5.0 |
+| `path_intrusion_rule.corridor_width` | 6.0 | 2.0 |
+| `key_target_proximity_rule` | 独立参数组 | 移除（合并到 SafetyThresholds） |
+| `corridor_pointcloud_rule` | 独立参数组 | 移除（合并到 processObstacle） |
+
+**删除参数组:**
+```yaml
+# 已删除（合并到统一逻辑）:
+key_target_proximity_rule:
+  enabled: true
+corridor_pointcloud_rule:
+  enabled: true
+```
+
+### 优点
+
+1. **一致性**：所有障碍物用同一套几何算法，消除三类障碍物判断逻辑分裂
+2. **更安全**：最小距离 ≤ 质心距离，不会漏掉"突出部分侵入"的情况
+3. **更准确**：旋转矩形保留障碍物朝向信息，AABB 不丢失角度
+4. **可维护**：参数集中管理，阈值调整不需要改代码
+
+### 行为对比
+
+| 场景 | 修改前 | 修改后 |
+|------|--------|--------|
+| 障碍物角落靠近但质心较远 | 可能不触发（漏报） | 触发（正确） |
+| 障碍物靠近但未接触 | 可能误报 | 精确判断 |
+| 障碍物在车身边界 | 用 AABB 近似 | 用精确旋转矩形 |
+
+---
+
+## 2026-04-23: 添加任务状态上报功能
+
+### 需求
+车端每 1s 上报一次任务状态，每次更改任务状态立即上报一次。
+
+### Topic
+`/vehicle/task_status` (std_msgs/Int32MultiArray)
+
+### 消息格式
+```
+data[0] = state       // 状态码 (0-8)
+data[1] = timestamp    // Unix 时间戳
+data[2] = task_id     // 任务编号（-1 表示无任务）
+data[3] = reserved     // 预留
+```
+
+### 状态码对照表
+
+| 状态 | 状态码 | 说明 |
+|------|--------|------|
+| NOT_STARTED | 0 | 未启动 |
+| IDLE | 1 | 空闲中 |
+| AUTO_WORKING | 2 | 自动作业中 |
+| TEMP_WORKING | 3 | 临时作业中 |
+| EMERGENCY_STOP | 4 | 紧急停车中 |
+| OBSTACLE_STOP | 5 | 避障停车中 |
+| REMOTE_CONTROL | 6 | 远程接管中 |
+| ENDING | 7 | 结束作业中 |
+| ENDED | 8 | 已结束 |
+
+### 修改文件
+
+#### 1. `src/autonomous_loader_bt/include/autonomous_loader_bt/loader_bt_nodes.h`
+
+**新增 TaskStatusReporter 类:**
+```cpp
+class TaskStatusReporter
+{
+public:
+    static TaskStatusReporter& instance();
+
+    enum State { ... };
+
+    void init(ros::NodeHandle& nh);
+    void setState(int state, const std::string& task_id = "");
+    void setTaskId(const std::string& task_id);
+    int getState();
+    std::string getTaskId();
+
+private:
+    // ... 成员变量和私有方法
+};
+```
+
+**GlobalState 类新增方法:**
+```cpp
+void setTaskId(const std::string& task_id);
+std::string getTaskId() const;
+
+// 成员变量
+std::string current_task_id_;
+```
+
+#### 2. `src/autonomous_loader_bt/src/loader_bt_nodes.cpp`
+
+**修改 SetWorkState::tick():**
+```cpp
+BT::NodeStatus SetWorkState::tick()
+{
+    int value;
+    if (!getInput("value", value)) { return BT::NodeStatus::FAILURE; }
+    ros::param::set("/workstate", value);
+
+    // 调用状态上报模块
+    std::string task_id = autonomous_loader_bt::GlobalState::getInstance().getTaskId();
+    autonomous_loader_bt::TaskStatusReporter::instance().setState(value, task_id);
+
+    ROS_INFO("[BT] Set /workstate to %d, TaskID: %s", value, task_id.c_str());
+    return BT::NodeStatus::SUCCESS;
+}
+```
+
+**新增 GlobalState 方法:**
+```cpp
+void GlobalState::setTaskId(const std::string& task_id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    current_task_id_ = task_id;
+}
+
+std::string GlobalState::getTaskId() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return current_task_id_;
+}
+```
+
+#### 3. `src/autonomous_loader_bt/src/autonomous_loader_bt_node.cpp`
+
+**在构造函数中初始化:**
+```cpp
+// 初始化任务状态上报器
+autonomous_loader_bt::TaskStatusReporter::instance().init(nh_);
+```
+
+**在接收任务时更新 task_id:**
+```cpp
+// startTaskCallback 中
+autonomous_loader_bt::GlobalState::getInstance().setTaskId(std::to_string(msg->task_id));
+autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(std::to_string(msg->task_id));
+
+// taskServiceCallback 中
+autonomous_loader_bt::GlobalState::getInstance().setTaskId(std::to_string(req.taskID));
+autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(std::to_string(req.taskID));
+```
+
+**在取消任务时清除 task_id:**
+```cpp
+gs.setTaskId("");
+autonomous_loader_bt::TaskStatusReporter::instance().setTaskId("");
+```
+
+### 触发时机
+
+| 时机 | 动作 |
+|------|------|
+| SetWorkState 执行 | 设置状态，触发立即上报 |
+| 接收新任务 | 更新 task_id |
+| 任务取消/完成 | 清除 task_id |
+| 每秒定时器 | 定时上报当前状态 |

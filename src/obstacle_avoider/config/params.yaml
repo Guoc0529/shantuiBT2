@@ -10,35 +10,33 @@ topics:
 
 # Vehicle Model for Rectangular Collision Checking
 vehicle_model:
-  length: 10.0 # 5m front + 5m back
-  width: 5.0   # 1.5m left + 1.5m right
-  safety_margin: 0.5 # An extra buffer around the vehicle rectangle
+  length: 10.0  # 车身长：前5m + 后5m
+  width: 5.0    # 车身宽：左右各2.5m（含安全边距）
+  safety_margin: 0.5  # 额外安全缓冲区
+
+# --- 安全判断阈值（基于最小距离）---
+safety_thresholds:
+  body_proximity: 0.0     # 障碍物进入车身矩形就算重叠（=0表示精确碰撞检测）
+  path_corridor: 1.0     # 路径两侧走廊宽度（每侧1m）
+  human_alert_distance: 20.0  # 行人预警距离
 
 # Zone definition
 # If vehicle's loc.x > stockyard_x_threshold, it's in the stockyard.
 # Otherwise, it's in the corridor.
 stockyard_x_threshold: -3.0
 
-# --- Rule A: Path Intrusion Detection (Applies Everywhere) ---
+# --- Rule A: 路径入侵检测 ---
 path_intrusion_rule:
-  corridor_width: 2.0 # 3m left + 3m right
+  corridor_width: 2.0  # 路径走廊总宽度（每侧各1m）
   human_alert:
     enabled: true
-    max_distance: 20.0
+    max_distance: 20.0  # 行人预警距离
 
-# --- Rule B: Key Target Body Proximity (Applies Everywhere) ---
-# This rule now uses the vehicle_model rectangle instead of a simple radius
-key_target_proximity_rule:
-  enabled: true
-
-# --- Rule C: Corridor-Specific Pointcloud Check ---
-# This rule also uses the vehicle_model rectangle
-corridor_pointcloud_rule:
-  enabled: true
-
-# --- Rule D & E & F: Special States ---
-# In these workstates, pointcloud detection is disabled in the stockyard
-stockyard_pointcloud_disable_states: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-# During this specific workstate (arm raising), ignore obstacles in front
+# --- Rule D: 臂举升特殊处理 ---
+# 臂举升（状态4）时忽略障碍物正前方检测
 arm_raising_state: 4
+
+# --- Rule C: 料场点云处理 ---
+# 在料场内时，点云障碍物检测会被跳过（由 processObstacle 统一处理）
+# 料场判定由 stockyard_x_threshold 控制
+stockyard_pointcloud_disable_states: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

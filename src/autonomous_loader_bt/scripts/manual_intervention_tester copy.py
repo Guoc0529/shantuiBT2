@@ -176,8 +176,8 @@ class ManualInterventionTester:
             self.log.warning("/spadingPose call failed")
 
     # ----------- 键盘触发动作 -------------
-    def send_task(self, task_id:int, bin_id:int, hopper_id:int):
-        msg = TaskCommand(task_id=task_id, bin_id=bin_id, hopper_id=hopper_id, task_type="scoop")
+    def send_task(self, bin_id:int, hopper_id:int):
+        msg = TaskCommand(task_id=random.randint(100,999), bin_id=bin_id, hopper_id=hopper_id, task_type="scoop")
         self.task_pub.publish(msg)
         self.log.info("Sent Task #%d (bin=%d hopper=%d)", msg.task_id, msg.bin_id, msg.hopper_id)
         self._req_scoop(msg.bin_id)
@@ -242,10 +242,9 @@ def main():
                         else: nav.set_mode(NavMode.NORMAL)
                         
                         # 2. 输入 bin/hopper ID
-                        ti = int(input("Enter task_id (0 to cancel): "))
                         bi = int(input("Enter bin_id  (1-3): "))
                         hi = int(input("Enter hopper_id (1-5): "))
-                        tester.send_task(ti, bi, hi)
+                        tester.send_task(bi, hi)
 
                     except (ValueError, IndexError):
                         print("Invalid input, task cancelled.")

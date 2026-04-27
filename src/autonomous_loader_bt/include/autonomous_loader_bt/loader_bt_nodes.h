@@ -8,11 +8,13 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Int32MultiArray.h>
 #include <yaml-cpp/yaml.h>
 #include <chrono>
 #include <queue>
 #include <mutex>
 #include <map>
+#include <atomic>
 #include <autonomous_loader_msgs/NavigateAction.h>
 
 namespace autonomous_loader_bt
@@ -89,6 +91,10 @@ public:
     bool isPauseTask() const;
     bool isEndTask() const;
     bool isCancelTask() const;
+
+    // Task ID storage (int for atomic operations)
+    void setTaskId(int task_id);
+    int getTaskIdInt() const;
     
     void setNavigationArrived(bool arrived);
     void setDistanceToGoal(double distance);
@@ -160,6 +166,100 @@ private:
     
     // Arm/Bucket action code
     int arm_bucket_code_ = 0;
+
+    // Current task ID for status reporting
+    std::atomic<int> current_task_id_{-1};
+};
+
+// ========== 任务状态上报器 ==========
+// 功能：车端每 1s 上报一次任务状态，每次更改任务状态立即上报一次
+class TaskStatusReporter
+{
+public:
+    static TaskStatusReporter& instance() {
+        static TaskStatusReporter inst;
+        return inst;
+    }
+
+    // 任务状态枚举
+    enum State {
+        NOT_STARTED = 0,      // 未启动
+        IDLE = 1,             // 空闲中
+        AUTO_WORKING = 2,     // 自动作业中
+        TEMP_WORKING = 3,     // 临时作业中
+        EMERGENCY_STOP = 4,    // 紧急停车中
+        OBSTACLE_STOP = 5,    // 避障停车中
+        REMOTE_CONTROL = 6,    // 远程接管中
+        ENDING = 7,           // 结束作业中
+        ENDED = 8             // 已结束
+    };
+
+    // 初始化（需要在 ros::init 之后调用）
+    void init(ros::NodeHandle& nh) {
+        if (initialized_) return;
+
+        status_pub_ = nh.advertise<std_msgs::Int32MultiArray>("/vehicle/task_status", 10, true);
+        timer_ = nh.createTimer(ros::Duration(1.0), &TaskStatusReporter::timerCallback, this);
+        initialized_ = true;
+
+        ROS_INFO("[TaskStatusReporter] Initialized, publishing to /vehicle/task_status");
+    }
+
+    // 设置状态（状态变更立即上报）
+    void setState(int state, const std::string& task_id = "") {
+        int old_state = current_state_.load();
+        current_state_.store(state);
+        
+        if (!task_id.empty()) {
+            task_id_.store(std::stoi(task_id));
+        }
+        
+        if (old_state != state) {
+            ROS_INFO("[TaskStatusReporter] State changed: %d -> %d", old_state, state);
+            report();  // 状态变更立即上报
+        }
+    }
+
+    // 设置任务编号
+    void setTaskId(int task_id) {
+        task_id_.store(task_id);
+    }
+
+    // 获取当前状态
+    int getState() {
+        return current_state_.load();
+    }
+
+    // 获取当前任务编号
+    int getTaskIdInt() {
+        return task_id_.load();
+    }
+
+private:
+    TaskStatusReporter() : initialized_(false), current_state_(0), task_id_(-1) {}
+
+    TaskStatusReporter(const TaskStatusReporter&) = delete;
+    TaskStatusReporter& operator=(const TaskStatusReporter&) = delete;
+
+    void timerCallback(const ros::TimerEvent&) {
+        report();
+    }
+
+    void report() {
+        std_msgs::Int32MultiArray msg;
+        msg.data.resize(4);
+        msg.data[0] = current_state_.load();                    // 状态码
+        msg.data[1] = static_cast<int32_t>(ros::Time::now().sec);  // Unix 时间戳
+        msg.data[2] = task_id_.load();                          // 任务编号
+        msg.data[3] = 0;                                         // 预留
+        status_pub_.publish(msg);
+    }
+
+    ros::Publisher status_pub_;
+    ros::Timer timer_;
+    std::atomic<int> current_state_;
+    std::atomic<int> task_id_;
+    bool initialized_;
 };
 
 // ========== 条件节点 ==========
