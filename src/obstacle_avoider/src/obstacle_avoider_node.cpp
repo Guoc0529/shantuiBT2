@@ -32,6 +32,12 @@ struct SafetyThresholds {
     double human_alert_distance;
 };
 
+// 鸣笛参数结构体
+struct HornParams {
+    bool enabled;
+    double min_distance;
+};
+
 struct Point2D {
     double x, y;
     Point2D() : x(0), y(0) {}
@@ -144,7 +150,9 @@ static double quaternionToYaw(const geometry_msgs::Quaternion& q) {
 class ObstacleAvoider
 {
 public:
-    ObstacleAvoider() : nh_("~")
+    ObstacleAvoider() : nh_("~"),
+        emergency_stop_hold_duration_(5.0),
+        emergency_stop_hold_time_(ros::Time())
     {
         loadParams();
 
@@ -188,6 +196,13 @@ private:
         public_nh.param("path_intrusion_rule/corridor_width", path_intrusion_rule_.corridor_width, 2.0);
         public_nh.param("path_intrusion_rule/human_alert/enabled", path_intrusion_rule_.human_alert.enabled, true);
         public_nh.param("path_intrusion_rule/human_alert/max_distance", path_intrusion_rule_.human_alert.max_distance, 20.0);
+
+        // 急停保持机制参数
+        public_nh.param("emergency_stop_hold_duration", emergency_stop_hold_duration_, 5.0);
+
+        // 鸣笛参数
+        public_nh.param("horn/enabled", horn_params_.enabled, true);
+        public_nh.param("horn/min_distance", horn_params_.min_distance, 20.0);
 
         public_nh.getParam("stockyard_pointcloud_disable_states", stockyard_pointcloud_disable_states_);
         public_nh.param("arm_raising_state", arm_raising_state_, 4);
@@ -262,23 +277,33 @@ private:
         return false;
     }
 
-    // ## 核心：统一最小距离判断
-    template<typename T>
-    double computeMinDistance(const T& obstacle, const lidar_camera_fusion::PerceptInfo& self_info, const OrientedRect& vehicle_rect) {
+    // ## 核心：统一最小距离判断（重载版本）
+    double computeMinDistance(const lidar_camera_fusion::Obstacle& obstacle,
+                            const lidar_camera_fusion::PerceptInfo& self_info,
+                            const OrientedRect& vehicle_rect) {
         double local_x, local_y;
         getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
+        Point2D obs_point(local_x, local_y);
+        return minDistancePointToRect(obs_point, vehicle_rect);
+    }
 
-        if (std::is_same<T, jsk_recognition_msgs::BoundingBox>::value) {
-            const auto& bbox = obstacle;
-            double bbox_yaw = quaternionToYaw(bbox.pose.orientation);
-            OrientedRect obs_rect(bbox.pose.position.x, bbox.pose.position.y, bbox_yaw,
-                                   bbox.dimensions.x, bbox.dimensions.y);
-            obs_rect.computeCorners();
-            return minDistanceBetweenRects(vehicle_rect, obs_rect);
-        } else {
-            Point2D obs_point(local_x, local_y);
-            return minDistancePointToRect(obs_point, vehicle_rect);
-        }
+    double computeMinDistance(const lidar_camera_fusion::originObs& obstacle,
+                            const lidar_camera_fusion::PerceptInfo& self_info,
+                            const OrientedRect& vehicle_rect) {
+        double local_x, local_y;
+        getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
+        Point2D obs_point(local_x, local_y);
+        return minDistancePointToRect(obs_point, vehicle_rect);
+    }
+
+    double computeMinDistance(const jsk_recognition_msgs::BoundingBox& bbox,
+                            const lidar_camera_fusion::PerceptInfo& self_info,
+                            const OrientedRect& vehicle_rect) {
+        double bbox_yaw = quaternionToYaw(bbox.pose.orientation);
+        OrientedRect obs_rect(bbox.pose.position.x, bbox.pose.position.y, bbox_yaw,
+                              bbox.dimensions.x, bbox.dimensions.y);
+        obs_rect.computeCorners();
+        return minDistanceBetweenRects(vehicle_rect, obs_rect);
     }
 
     // ## 判断障碍物是否在车辆正前方
@@ -311,57 +336,98 @@ private:
         OrientedRect vehicle_rect(0, 0, self_info.yaw, vehicle_model_.length, vehicle_model_.width);
         vehicle_rect.computeCorners();
 
-        bool estop = false;
-        bool horn = false;
+        bool estop_triggered = false;  // 本次循环是否触发了急停
+        bool horn_triggered = false;   // 本次循环是否触发了鸣笛
 
         // 3. 处理 PerceptInfo.obstacles
         for (const auto& obs : self_info.obstacles) {
-            processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, estop, horn);
-            if (estop) break;
+            if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+                estop_triggered = true;
+                break;
+            }
         }
 
         // 4. 处理 PerceptInfo.originObss
-        if (!estop) {
+        if (!estop_triggered) {
             for (const auto& obs : self_info.originObss) {
-                processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, estop, horn);
-                if (estop) break;
+                if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+                    estop_triggered = true;
+                    break;
+                }
             }
         }
 
         // 5. 处理 jsk_bboxes
-        if (!estop) {
+        if (!estop_triggered) {
             for (const auto& bbox : bbox_obstacles.boxes) {
-                processObstacle(bbox, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, estop, horn);
-                if (estop) break;
+                if (processObstacle(bbox, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+                    estop_triggered = true;
+                    break;
+                }
             }
         }
 
-        // 6. 发布结果
+        // 6. 急停保持机制：当前时刻急停且保持时间有效
+        bool estop_final = false;
+        ros::Time now = ros::Time::now();
+
+        if (estop_triggered) {
+            // 立即触发急停，更新保持时间起点
+            emergency_stop_hold_time_ = now;
+            estop_final = true;
+        } else if (emergency_stop_hold_duration_ > 0.0 && !emergency_stop_hold_time_.isZero()) {
+            // 检查是否在保持时间内
+            double elapsed = (now - emergency_stop_hold_time_).toSec();
+            if (elapsed < emergency_stop_hold_duration_) {
+                // 仍在保持时间内，继续急停
+                estop_final = true;
+                if (elapsed < emergency_stop_hold_duration_ * 0.5) {
+                    ROS_INFO_THROTTLE(1.0, "[急停保持] 障碍物已消失，保持急停中 (%.1f/%.1f秒)",
+                                      elapsed, emergency_stop_hold_duration_);
+                }
+            } else {
+                // 超过保持时间，重置
+                emergency_stop_hold_time_ = ros::Time();
+                ROS_INFO("[急停保持] 超过保持时间，解除急停");
+            }
+        }
+
+        // 7. 鸣笛逻辑：本次触发了鸣笛或者在急停保持期间鸣笛
+        bool horn_final = horn_triggered;
+        if (!horn_final && horn_params_.enabled && estop_final && !emergency_stop_hold_time_.isZero()) {
+            // 在急停保持期间，检查是否需要持续鸣笛（检查最近一次鸣笛触发障碍物的距离）
+            // 简化为：急停保持期间持续鸣笛
+            horn_final = true;
+        }
+
+        // 8. 发布结果
         std_msgs::UInt8 estop_msg;
-        estop_msg.data = estop ? 1 : 0;
+        estop_msg.data = estop_final ? 1 : 0;
         std_msgs::UInt8 horn_msg;
-        horn_msg.data = horn ? 1 : 0;
+        horn_msg.data = horn_final ? 1 : 0;
         estop_pub_.publish(estop_msg);
         horn_pub_.publish(horn_msg);
     }
 
     // ## 统一障碍物处理逻辑
+    // 返回 true 表示触发了急停，false 表示未触发
+    // 通过引用参数 horn_triggered 返回是否触发鸣笛
     template<typename T>
-    void processObstacle(const T& obstacle, const nav_msgs::Path& path,
+    bool processObstacle(const T& obstacle, const nav_msgs::Path& path,
                         const lidar_camera_fusion::PerceptInfo& self_info,
                         const OrientedRect& vehicle_rect,
                         bool is_in_stockyard, bool arm_is_raising,
-                        bool& estop, bool& horn)
+                        bool& horn_triggered)
     {
         // --- 跳过条件 ---
         // Rule D: 臂举升时忽略正前方障碍物
         if (arm_is_raising && isInFront(obstacle, self_info)) {
-            return;
+            return false;
         }
 
         // Rule C: 点云障碍物在料场内时跳过
         if (std::is_same<T, jsk_recognition_msgs::BoundingBox>::value && is_in_stockyard) {
-            return;
+            return false;
         }
 
         // --- 计算最小距离 ---
@@ -377,22 +443,26 @@ private:
             } else {
                 ROS_WARN("[Rule B] 障碍物距离车辆过近！最小距离: %.2fm. 急停.", min_dist);
             }
-            estop = true;
-            return;
+            return true;
         }
 
         // --- Rule A: 路径入侵判断 ---
         if (isOnPath(obstacle, path, self_info)) {
-            if (classid == 0 && path_intrusion_rule_.human_alert.enabled &&
-                min_dist < path_intrusion_rule_.human_alert.max_distance) {
+            // 鸣笛判断：行人 + 鸣笛功能启用 + 距离条件
+            bool should_horn = horn_params_.enabled &&
+                              classid == 0 &&
+                              min_dist < horn_params_.min_distance;
+
+            if (should_horn) {
                 ROS_WARN("[Rule A] 行人在路径上！最小距离: %.2fm. 鸣笛+急停.", min_dist);
-                horn = true;
+                horn_triggered = true;
             } else {
                 ROS_WARN("[Rule A] 障碍物入侵路径走廊！最小距离: %.2fm. 急停.", min_dist);
             }
-            estop = true;
-            return;
+            return true;
         }
+
+        return false;
     }
 
     // ## 成员变量 ##
@@ -405,8 +475,13 @@ private:
     VehicleModel vehicle_model_;
     SafetyThresholds safety_thresholds_;
     PathIntrusionRule path_intrusion_rule_;
+    HornParams horn_params_;
     std::vector<int> stockyard_pointcloud_disable_states_;
     int arm_raising_state_;
+
+    // 急停保持机制
+    double emergency_stop_hold_duration_;  // 急停保持时间（秒）
+    ros::Time emergency_stop_hold_time_;   // 上次急停触发时间
 
     std::mutex data_mutex_;
     nav_msgs::Path current_path_;

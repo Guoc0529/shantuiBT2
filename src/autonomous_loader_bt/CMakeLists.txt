@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
 # 步骤 2: 找到外部库
 find_package(behaviortree_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(jsoncpp REQUIRED)
 
 # 步骤 3: (非常重要) 添加 catkin_package()
 catkin_package(
@@ -61,6 +62,7 @@ target_link_libraries(autonomous_loader_bt_node
   ${catkin_LIBRARIES}
   BT::behaviortree_cpp
   ${YAML_CPP_LIBRARIES}
+  jsoncpp_lib
   pthread # pthread 和 dl 是 BT.CPP 可能需要的
   dl
 )

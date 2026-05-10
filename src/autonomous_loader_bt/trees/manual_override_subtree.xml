@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  通用人工接管子树
+  用法: <SubTree ID="ManualOverride" phase="导航" message="规划失败" timeout="600"/>
+
+  phase:    当前作业阶段（导航-铲料点 / 导航-卸料仓 / 臂铲动作 / 卸料动作 等）
+  message:  显示给操作员的信息
+  timeout:  接管超时时间（秒），超时后返回 FAILURE 让外层进入错误处理
+
+  流程: PublishOverrideRequest → RequestManualIntervention → WaitForManualOverride
+      → AlwaysFailure(返回 FAILURE) → 外层 RetryUntilSuccessful 重试导航
+-->
+<root BTCPP_format="4">
+    <BehaviorTree ID="ManualOverride">
+        <Sequence>
+            <!-- 发布接管请求到上位机（包含 phase、message、车辆位置、时间戳） -->
+            <PublishOverrideRequest phase="{phase}" message="{message}"/>
+
+            <!-- 发急停 + 设全局参数 -->
+            <RequestManualIntervention message="{message}"/>
+
+            <!-- 等待接管完成，超时后返回 FAILURE -->
+            <WaitForManualOverride timeout="{override_timeout}"/>
+
+            <!-- 接管完成后返回 FAILURE，触发外层 RetryUntilSuccessful 重试 -->
+            <AlwaysFailure/>
+        </Sequence>
+    </BehaviorTree>
+</root>

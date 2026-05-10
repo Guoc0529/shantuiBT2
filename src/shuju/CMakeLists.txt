@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
 )
 add_service_files(FILES cangdou.srv)
+add_message_files(FILES TaskCtrl.msg)
 generate_messages(DEPENDENCIES std_msgs)
 catkin_package(CATKIN_DEPENDS message_runtime std_msgs)
 include_directories(${catkin_INCLUDE_DIRS})

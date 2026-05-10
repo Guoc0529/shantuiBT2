@@ -24,19 +24,11 @@
                                 error_code="{error_code}"
                                 error_msg="{error_msg}"/>
                         </Sequence>
-                        <Sequence>
-                            <RequestManualIntervention message="Path planning failed or timed out."/>
-                            <Fallback>
-                            <!-- 人工介入正常路径 -->
-                                <WaitForManualIntervention/>
-                            <!-- 新业务打断防止陷入无尽循环 -->
-                                <Sequence>
-                                    <CheckEndTask/>
-                                    <AlwaysFailure/>
-                                </Sequence>
-                            </Fallback>
-                            <AlwaysFailure/>
-                        </Sequence>
+                        <!-- 规划失败：使用通用人工接管子树 -->
+                        <SubTree ID="ManualOverride"
+                                 phase="导航"
+                                 message="路径规划失败，请手动将车辆移动到合适位置后点击完成"
+                                 override_timeout="600"/>
                     </Fallback>
 
                     <Fallback>

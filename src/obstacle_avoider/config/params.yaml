@@ -25,6 +25,15 @@ safety_thresholds:
 # Otherwise, it's in the corridor.
 stockyard_x_threshold: -3.0
 
+# --- 急停保持机制 ---
+# 急停触发后，即使障碍物消失，也保持急停状态N秒
+emergency_stop_hold_duration: 5.0  # 急停保持时间（秒）
+
+# --- 鸣笛功能参数化 ---
+horn:
+  enabled: true          # 是否启用鸣笛功能
+  min_distance: 20.0     # 鸣笛触发距离（行人距离小于此值时鸣笛）
+
 # --- Rule A: 路径入侵检测 ---
 path_intrusion_rule:
   corridor_width: 2.0  # 路径走廊总宽度（每侧各1m）

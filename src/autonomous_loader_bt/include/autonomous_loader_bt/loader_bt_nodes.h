@@ -670,6 +670,23 @@ public:
     BT::NodeStatus tick() override;
 };
 
+class PublishOverrideRequest : public BT::SyncActionNode
+{
+public:
+    PublishOverrideRequest(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts()
+    {
+        return {
+            BT::InputPort<std::string>("phase", "", "当前作业阶段"),
+            BT::InputPort<std::string>("message", "", "显示给操作员的信息")
+        };
+    }
+    BT::NodeStatus tick() override;
+private:
+    ros::NodeHandle nh_;
+    ros::Publisher override_request_pub_;
+};
+
 class RequestManualIntervention : public BT::SyncActionNode
 {
 public:
@@ -699,6 +716,28 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber intervention_sub_;
     ros::Publisher estop_pub_;
+    std::atomic<bool> intervention_complete_;
+};
+
+class WaitForManualOverride : public BT::StatefulActionNode
+{
+public:
+    WaitForManualOverride(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts()
+    {
+        return { BT::InputPort<double>("timeout", 600.0, "接管超时时间（秒）") };
+    }
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+private:
+    void interventionCallback(const std_msgs::Bool::ConstPtr& msg);
+    ros::NodeHandle nh_;
+    ros::Subscriber intervention_sub_;
+    ros::Publisher vehicle_pose_pub_;
+    ros::Publisher estop_pub_;
+    ros::Time start_time_;
+    double timeout_s_ = 600.0;
     std::atomic<bool> intervention_complete_;
 };
 

@@ -95,9 +95,18 @@ public:
             // 构建行为树文件路径
             std::string tree_path = getPackagePath() + "/trees/" + tree_file;
             
-            // 创建行为树
-            tree_ = factory.createTreeFromFile(tree_path);
-            ROS_INFO("Successfully loaded behavior tree: %s", tree_path.c_str());
+            // 注册通用人工接管子树（必须在创建主树之前）
+            std::string subtree_path = getPackagePath() + "/trees/manual_override_subtree.xml";
+            factory.registerBehaviorTreeFromFile(subtree_path);
+            ROS_INFO("Registered manual override subtree from: %s", subtree_path.c_str());
+            
+            // 注册主行为树（包含 SubTree 引用）
+            factory.registerBehaviorTreeFromFile(tree_path);
+            
+            // 使用 createTree 而非 createTreeFromFile（避免警告）
+            std::string main_tree_name = "AutonomousLoaderTree";
+            tree_ = factory.createTree(main_tree_name);
+            ROS_INFO("Successfully loaded behavior tree: %s", main_tree_name.c_str());
 
             // 设置日志记录器
             if (enable_logging) {

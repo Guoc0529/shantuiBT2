@@ -8,6 +8,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <random>
 #include <cmath>
+#include <jsoncpp/json/json.h>
 
 namespace autonomous_loader_bt
 {
@@ -831,6 +832,82 @@ void WaitForManualIntervention::onHalted()
     intervention_complete_ = false;
 }
 
+WaitForManualOverride::WaitForManualOverride(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::StatefulActionNode(name, config), intervention_complete_(false)
+{
+    intervention_sub_ = nh_.subscribe("/autonomous_loader/manual_intervention_complete", 1,
+                                      &WaitForManualOverride::interventionCallback, this);
+    vehicle_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/bt_override/vehicle_pose", 1, true);
+    estop_pub_ = nh_.advertise<std_msgs::Bool>("/ACU_EStop", 1);
+}
+
+void WaitForManualOverride::interventionCallback(const std_msgs::Bool::ConstPtr& msg)
+{
+    if (msg->data) {
+        ROS_INFO("[BT] Manual override complete signal received.");
+        intervention_complete_ = true;
+    }
+}
+
+BT::NodeStatus WaitForManualOverride::onStart()
+{
+    if (!getInput("timeout", timeout_s_) || timeout_s_ <= 0.0) {
+        timeout_s_ = 600.0;
+    }
+    intervention_complete_ = false;
+    start_time_ = ros::Time::now();
+    ROS_WARN("[BT] Waiting for manual override... (timeout: %.1fs)", timeout_s_);
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus WaitForManualOverride::onRunning()
+{
+    ros::Time now = ros::Time::now();
+
+    // 定期上报车辆位置（每 1 秒）
+    static ros::Time last_pub_time(0);
+    if ((now - last_pub_time).toSec() > 1.0) {
+        auto pose = GlobalState::getInstance().getCurrentPose();
+        vehicle_pose_pub_.publish(pose);
+        ROS_INFO_THROTTLE(1.0, "[ManualOverride] 等待接管完成. 当前车辆: (%.2f, %.2f)",
+                          pose.pose.position.x, pose.pose.position.y);
+        last_pub_time = now;
+    }
+
+    // 检查超时
+    if ((now - start_time_).toSec() > timeout_s_) {
+        ROS_ERROR("[BT] Manual override timeout after %.1fs.", timeout_s_);
+        ros::param::set("/autonomous_loader/manual_intervention_required", false);
+        std_msgs::Bool estop_msg;
+        estop_msg.data = false;
+        estop_pub_.publish(estop_msg);
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // 检查接管完成信号
+    if (intervention_complete_) {
+        ros::param::set("/autonomous_loader/manual_intervention_required", false);
+        std_msgs::Bool estop_msg;
+        estop_msg.data = false;
+        estop_pub_.publish(estop_msg);
+        ROS_INFO("[BT] Manual override complete. E-Stop released.");
+        intervention_complete_ = false;
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    return BT::NodeStatus::RUNNING;
+}
+
+void WaitForManualOverride::onHalted()
+{
+    intervention_complete_ = false;
+    ros::param::set("/autonomous_loader/manual_intervention_required", false);
+    std_msgs::Bool estop_msg;
+    estop_msg.data = false;
+    estop_pub_.publish(estop_msg);
+}
+
+
 BT::NodeStatus WaitForArmBucketCompletion::onStart()
 {
     if (!getInput("timeout_s", timeout_s_) || timeout_s_ <= 0.0) {
@@ -1324,6 +1401,43 @@ BT::NodeStatus CheckArrivalQuality::tick()
     return is_ok ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
+PublishOverrideRequest::PublishOverrideRequest(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::SyncActionNode(name, config)
+{
+    override_request_pub_ = nh_.advertise<std_msgs::String>("/bt_override/request", 1, true);
+}
+
+BT::NodeStatus PublishOverrideRequest::tick()
+{
+    std::string phase;
+    std::string message;
+    getInput("phase", phase);
+    getInput("message", message);
+
+    auto pose = GlobalState::getInstance().getCurrentPose();
+
+    // 构造 JSON 消息
+    Json::Value json;
+    json["phase"] = phase;
+    json["message"] = message;
+    json["timestamp"] = ros::Time::now().toSec();
+    json["vehicle_pose"]["position"]["x"] = pose.pose.position.x;
+    json["vehicle_pose"]["position"]["y"] = pose.pose.position.y;
+    json["vehicle_pose"]["position"]["z"] = pose.pose.position.z;
+    json["vehicle_pose"]["orientation"]["x"] = pose.pose.orientation.x;
+    json["vehicle_pose"]["orientation"]["y"] = pose.pose.orientation.y;
+    json["vehicle_pose"]["orientation"]["z"] = pose.pose.orientation.z;
+    json["vehicle_pose"]["orientation"]["w"] = pose.pose.orientation.w;
+
+    Json::FastWriter writer;
+    std_msgs::String msg;
+    msg.data = writer.write(json);
+    override_request_pub_.publish(msg);
+
+    ROS_WARN("[BT] Override request published: phase=%s, message=%s", phase.c_str(), message.c_str());
+    return BT::NodeStatus::SUCCESS;
+}
+
 RequestManualIntervention::RequestManualIntervention(const std::string& name, const BT::NodeConfiguration& config)
     : BT::SyncActionNode(name, config)
 {
@@ -1422,6 +1536,8 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     factory.registerNodeType<WaitForPlanningFeedback>("WaitForPlanningFeedback");
     factory.registerNodeType<RequestManualIntervention>("RequestManualIntervention");
     factory.registerNodeType<WaitForManualIntervention>("WaitForManualIntervention");
+    factory.registerNodeType<WaitForManualOverride>("WaitForManualOverride");
+    factory.registerNodeType<PublishOverrideRequest>("PublishOverrideRequest");
     factory.registerNodeType<WaitForNavigationResult>("WaitForNavigationResult");
     factory.registerNodeType<SetWorkState>("SetWorkState");
 

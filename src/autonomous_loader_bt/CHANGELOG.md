@@ -1,5 +1,143 @@
 # 代码修改记录
 
+## 2026-04-27: 添加通用人工接管模块
+
+### 需求
+将分散在行为树各处的「发现失败 → 人工接管 → 等待完成 → 继续重试」逻辑抽象为一个通用子树模块，在任意失败处只需插入一行 `<SubTree>` 标签即可复用。
+
+### 设计目标
+- 通用性：同一子树可用于导航规划失败、臂铲动作失败、卸料动作失败等多种场景
+- 零代码耦合：调用方只需传 `phase`（阶段）和 `message`（提示信息）
+- 上位机透明：状态机主动上报接管请求（含车辆位置），上位机负责 UI 提示和操作员交互
+
+### Topic 列表
+
+| Topic | 类型 | 方向 | 说明 |
+|-------|------|------|------|
+| `/bt_override/request` | std_msgs/String (JSON) | 发布 | 人工接管请求，包含 phase、message、车辆位姿、时间戳 |
+| `/bt_override/vehicle_pose` | geometry_msgs/PoseStamped | 发布 | 等待接管期间定期上报车辆位置（每 1s） |
+| `/autonomous_loader/manual_intervention_required` | param (bool) | set | 人工接管进行中标志 |
+| `/autonomous_loader/manual_intervention_complete` | std_msgs/Bool | 订阅 | 上位机发送 true = 接管完成；车辆解除急停，重新发起规划 |
+
+### `/bt_override/request` 消息格式 (JSON)
+
+```json
+{
+  "phase": "导航-铲料点",
+  "message": "路径规划失败，请手动将车辆移动到合适位置后点击完成",
+  "timestamp": 1713849600.123,
+  "vehicle_pose": {
+    "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+    "orientation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+  }
+}
+```
+
+### 流程说明
+
+```
+规划失败（WaitForPlanningFeedback 返回 FAILURE）
+    │
+    ▼
+┌─────────────────────────────────────────────┐
+│  ManualOverride 子树（通用接管流程）           │
+│                                             │
+│  1. PublishOverrideRequest                   │
+│     → 发布请求 JSON 到 /bt_override/request  │
+│                                             │
+│  2. RequestManualIntervention               │
+│     → 取消导航 + 发急停 + 设 manual_        │
+│       intervention_required=true            │
+│                                             │
+│  3. WaitForManualOverride                   │
+│     → 等待 /manual_intervention_complete    │
+│     → 超时（默认 600s）返回 FAILURE          │
+│     → 接管完成：清除参数 + 解除急停           │
+│                                             │
+│  4. AlwaysFailure                           │
+│     → 返回 FAILURE                          │
+└─────────────────────────────────────────────┘
+    │
+    ▼
+外层 RetryUntilSuccessful 重试
+    │
+    ▼
+ResetNavigationArrived / ResetPlanningFeedback 等重置
+    │
+    ▼
+重新 SendNavigationGoal（从当前位置重新规划）
+```
+
+### 通用子树调用方式
+
+```xml
+<!-- 任意需要接管的地方，插入一行即可 -->
+<SubTree ID="ManualOverride"
+         phase="导航-铲料点"
+         message="路径规划失败，请手动将车辆移动到合适位置后点击完成"
+         override_timeout="600"/>
+```
+
+参数说明：
+- `phase`：当前作业阶段，用于上位机区分场景
+- `message`：显示给操作员的信息
+- `override_timeout`：接管超时时间（秒），超时后返回 FAILURE 进入外层错误处理
+
+### 修改文件
+
+#### 1. `trees/manual_override_subtree.xml` (新增)
+新建通用人工接管子树，包含 4 个节点：PublishOverrideRequest → RequestManualIntervention → WaitForManualOverride → AlwaysFailure。
+
+#### 2. `include/autonomous_loader_bt/loader_bt_nodes.h`
+新增两个类声明：
+- `PublishOverrideRequest`：发布接管请求 JSON 到 /bt_override/request
+- `WaitForManualOverride`：等待接管完成，支持超时，定期上报车辆位置
+
+#### 3. `src/loader_bt_nodes.cpp`
+实现新增节点，并注册到 BehaviorTreeFactory：
+```cpp
+factory.registerNodeType<WaitForManualOverride>("WaitForManualOverride");
+factory.registerNodeType<PublishOverrideRequest>("PublishOverrideRequest");
+```
+
+#### 4. `src/autonomous_loader_bt_node.cpp`
+注册通用子树文件：
+```cpp
+factory.registerBehaviorTreeFromFile(getPackagePath() + "/trees/manual_override_subtree.xml");
+```
+
+#### 5. `trees/autonomous_loader_tree.xml` (SafeNavigate 子树)
+将规划失败处理从冗余的 Sequence/Fallback 结构替换为一行 `<SubTree>` 调用：
+```xml
+<!-- 替换前（约 12 行） -->
+<Sequence>
+    <RequestManualIntervention message="Path planning failed..."/>
+    <Fallback>
+        <WaitForManualIntervention/>
+        <Sequence><CheckEndTask/><AlwaysFailure/></Sequence>
+    </Fallback>
+    <AlwaysFailure/>
+</Sequence>
+
+<!-- 替换后（1 行） -->
+<SubTree ID="ManualOverride"
+         phase="导航"
+         message="路径规划失败，请手动将车辆移动到合适位置后点击完成"
+         override_timeout="600"/>
+```
+
+### 待扩展场景
+以下场景可在后续迭代中通过同样方式接入通用接管子树：
+| 场景 | phase | 调用位置 |
+|------|-------|---------|
+| 铲料点规划失败 | 导航-铲料点 | SEQ_SCOOP_POINT_NAV |
+| 卸料仓规划失败 | 导航-卸料仓 | PARALLEL_DUMP_NAV_AND_RAISE |
+| 到达质量不达标 | 到达质量 | SafeNavigate Fallback |
+| 臂铲动作超时 | 臂铲动作 | SEQ_SCOOP_ACTIONS_ON_APPROACH |
+| 卸料动作超时 | 卸料动作 | SEQ_DUMP_ON_ARRIVAL |
+
+---
+
 ## 2026-04-17: 添加动作状态消息发布功能
 
 ### 需求
