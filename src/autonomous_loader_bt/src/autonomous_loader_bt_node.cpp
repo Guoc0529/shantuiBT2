@@ -15,6 +15,7 @@
 #include "autonomous_loader_bt/loader_bt_nodes.h"
 #include "autonomous_loader_bt/ros_topic_manager.h"
 #include "shuju/cangdou.h"
+#include "shuju/TaskCtrl.h"
 #include <stdexcept> // 用于 std::runtime_error
 
 // ---------------------------------------------------------------
@@ -210,6 +211,10 @@ private:
         start_task_sub_ = nh_.subscribe("scheduler/start_task", 10, &AutonomousLoaderBTNode::startTaskCallback, this);
         pause_task_sub_ = nh_.subscribe("scheduler/pause_task", 10, &AutonomousLoaderBTNode::pauseTaskCallback, this);
         end_task_sub_ = nh_.subscribe("scheduler/end_task", 10, &AutonomousLoaderBTNode::endTaskCallback, this);
+
+        // TaskCtrl 话题订阅 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
+        taskctrl_sub_ = nh_.subscribe("/task_ctrl_command", 10, &AutonomousLoaderBTNode::taskCtrlCallback, this);
+        ROS_INFO("Subscribed to /task_ctrl_command for task control commands");
         
         // 服务端：接收调度下发任务
         task_service_ = nh_.advertiseService("liaodou", &AutonomousLoaderBTNode::taskServiceCallback, this);
@@ -383,6 +388,49 @@ private:
         ROS_INFO("Received end task command: %s", msg->data ? "yes" : "no");
     }
 
+    void taskCtrlCallback(const shuju::TaskCtrl::ConstPtr& msg)
+    {
+        ROS_INFO("[TaskCtrl] Received: taskID=%d, ctrlCmd=%d, timestamp=%.1f",
+                 msg->taskID, msg->ctrlCmd, msg->timestamp);
+
+        auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+
+        switch (msg->ctrlCmd) {
+            case 1:  // 开始任务
+                gs.setStartTask(true);
+                ROS_INFO("[TaskCtrl] ctrlCmd=1: Start task flag set");
+                break;
+
+            case 2:  // 远程接管
+                gs.setPauseTask(true);
+                ROS_INFO("[TaskCtrl] ctrlCmd=2: Remote takeover - pause task");
+                break;
+
+            case 3:  // 避障停车
+                gs.setPauseTask(true);
+                ROS_INFO("[TaskCtrl] ctrlCmd=3: Obstacle avoidance stop - pause task");
+                break;
+
+            case 4:  // 紧急停车
+                ROS_INFO("[TaskCtrl] ctrlCmd=4: Emergency stop - not implemented yet");
+                break;
+
+            case 5:  // 继续任务
+                gs.setPauseTask(false);
+                ROS_INFO("[TaskCtrl] ctrlCmd=5: Resume task");
+                break;
+
+            case 6:  // 结束任务
+                gs.setEndTask(true);
+                ROS_INFO("[TaskCtrl] ctrlCmd=6: End task");
+                break;
+
+            default:
+                ROS_WARN("[TaskCtrl] Unknown ctrlCmd: %d", msg->ctrlCmd);
+                break;
+        }
+    }
+
     bool taskServiceCallback(shuju::cangdou::Request& req, shuju::cangdou::Response& res)
     {
         // Publish the received task ID, whether it's a new task or a cancellation
@@ -441,6 +489,7 @@ private:
     ros::Subscriber start_task_sub_;
     ros::Subscriber pause_task_sub_;
     ros::Subscriber end_task_sub_;
+    ros::Subscriber taskctrl_sub_;
     
     ros::ServiceServer task_service_;
     

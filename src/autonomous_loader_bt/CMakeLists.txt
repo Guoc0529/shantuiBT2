@@ -92,5 +92,6 @@ install(PROGRAMS
   scripts/test_full_workflow.py
   scripts/interactive_tester.py
   scripts/mock_spading_service.py
+  scripts/manual_intervention_tester.py
   DESTINATION lib/${PROJECT_NAME}
 )

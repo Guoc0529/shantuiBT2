@@ -25,10 +25,13 @@
                                 error_msg="{error_msg}"/>
                         </Sequence>
                         <!-- 规划失败：使用通用人工接管子树 -->
-                        <SubTree ID="ManualOverride"
-                                 phase="导航"
-                                 message="路径规划失败，请手动将车辆移动到合适位置后点击完成"
-                                 override_timeout="600"/>
+                        <Sequence>
+                            <SetWorkState value="6"/>
+                            <SubTree ID="ManualOverride"
+                                     phase="导航"
+                                     message="路径规划失败，请手动将车辆移动到合适位置后点击完成"
+                                     override_timeout="600"/>
+                        </Sequence>
                     </Fallback>
 
                     <Fallback>
@@ -51,6 +54,7 @@
 
                         <!-- 真不可恢复：人工 -->
                         <Sequence>
+                            <SetWorkState value="6"/>
                             <RequestManualIntervention message="{error_msg}"/>
 
                             <Fallback>
@@ -73,13 +77,14 @@
                         </Inverter>
                         <Fallback>
                             <CheckArrivalQuality distance_error="{dist_error}" angle_error="{angle_error}"/>
-                            <Sequence>
-                                <RequestManualIntervention message="Dumping arrival quality is poor. Please intervene."/>
+                                <Sequence>
+                                    <SetWorkState value="6"/>
+                                    <RequestManualIntervention message="Dumping arrival quality is poor. Please intervene."/>
 
-                                <Fallback>
+                                    <Fallback>
 
-                                    <!-- 人工确认窗口 -->
-                                    <WaitForManualIntervention/>
+                                        <!-- 人工确认窗口 -->
+                                        <WaitForManualIntervention/>
 
                                     <!-- 超时自动撤回 -->
                                     <!-- <Sequence>
@@ -158,6 +163,7 @@
                     <Inverter>
                         <BlackboardCheck key="mission_ending" expected="true"/>
                     </Inverter>
+                    <CheckStartTask name="CheckStartTask"/>
                     <CheckNewTask name="CheckNewTask"/>
                     <GetAndSetCurrentTask name="GetAndSetCurrentTask"/>
 
@@ -176,6 +182,7 @@
                     </Fallback>
 
                     <SetWorkState value="1"/>
+                    <SetWorkState value="2"/>
 
                     <KeepRunningUntilFailure name="RepeatUntilFail">
                         <Sequence name="SEQ_ONE_CYCLE">
@@ -214,6 +221,7 @@
                                         <!-- 规划失败：人工 → 回来重来 -->
                                         <RetryUntilSuccessful num_attempts="-1">
                                             <Sequence>
+                                                <SetWorkState value="6"/>
                                                 <RequestManualIntervention
                                                     message="Planning to scoop failed, please intervene"/>
                                                 <WaitForManualIntervention/>
@@ -274,6 +282,7 @@
 
                                                 <!-- 失败：停车 + 人工 -->
                                                 <Sequence>
+                                                    <SetWorkState value="4"/>
                                                     <!-- <PauseNavigation/> -->
                                                     <!-- 加入ESTOP -->
                                                     <RequestManualIntervention
@@ -330,6 +339,7 @@
                                             <!-- 规划失败 → 人工 → 回来继续 -->
                                             <RetryUntilSuccessful num_attempts="-1">
                                                 <Sequence>
+                                                    <SetWorkState value="6"/>
                                                     <!-- <PauseNavigation/> -->
                                                     <!-- 可以加急停 -->
                                                     <RequestManualIntervention message="Planning to hopper failed, please intervene"/>
@@ -357,6 +367,7 @@
                                             <!-- 抬臂无回令 / 超时 -->
                                             <RetryUntilSuccessful num_attempts="-1">
                                                 <Sequence>
+                                                    <SetWorkState value="4"/>
                                                     <!-- <PauseNavigation/> -->
                                                     <!-- 可以加急停 -->
                                                     <RequestManualIntervention message="Arm raise timeout, vehicle stopped"/>
@@ -388,15 +399,13 @@
                                     <SetArmBucketState name="SetABS_6" code="6"/>
                                     <WaitForArmBucketCompletion name="WaitABS_6" timeout_s="300" message="Arrived at hopper, executing dump"/>
 
-                                    <SetWorkState value="4"/>
-
                                 </Sequence>
 
                             </Sequence>
 
                             <Sequence name="SEQ_AFTER_DUMP_WAIT_AND_DECIDE">
 
-                                <SetWorkState value="4"/>
+                                <SetWorkState value="2"/>
 
                                 <!-- 等待新任务：最多 10 秒 -->
                                 <Fallback name="WAIT_NEW_TASK_OR_TIMEOUT">
@@ -461,7 +470,7 @@
 
                                 <Sequence name="SEQ_WAIT_FOR_NEW_TASK_AND_CONTINUE">
 
-                                    <SetWorkState value="4"/>
+                                    <SetWorkState value="2"/>
                                     <RetryUntilSuccessful num_attempts="10">
                                         <Sequence>
                                             <CheckNewTask/>

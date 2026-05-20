@@ -11,6 +11,7 @@ manual_intervention_tester.py  (extended)
 3. 发送 `m` (manual_intervention_complete) 后自动把导航 mock 模式切回
    NORMAL，防止忘记。
 4. 按 `s` 键时，可交互式选择导航模式并指定 bin/hopper ID。
+5. TaskCtrl 指令控制：支持 ctrlCmd 1-6 的发送（启动、暂停、继续、结束等）。
 """
 from __future__ import annotations
 import math
@@ -34,6 +35,17 @@ from autonomous_loader_msgs.msg import (
     TaskCommand,
 )
 from autonomous_loader_msgs.srv import spadingPose
+from shuju.msg import TaskCtrl
+
+# ----------------------- ctrlCmd 定义 ---------------------------
+CTRL_CMD_NAMES = {
+    1: "开始任务",
+    2: "远程接管",
+    3: "避障停车",
+    4: "紧急停车",
+    5: "继续任务",
+    6: "结束任务",
+}
 
 # ----------------------- 日志配置 ----------------------------
 log_format = "[%(asctime)s.%(msecs)03d] [%(name)-11s] [%(levelname)-7s] %(message)s"
@@ -146,6 +158,10 @@ class ManualInterventionTester:
         self.mi_pub   = rospy.Publisher("/autonomous_loader/manual_intervention_complete", Bool, queue_size=1)
         self.status_sub = rospy.Subscriber(f"{bt_ns}/state_machine/status", String, self._status_cb)
 
+        # TaskCtrl 发布者
+        self.ctrl_pub = rospy.Publisher("/task_ctrl_command", TaskCtrl, queue_size=10)
+        rospy.sleep(0.2)  # Wait for publisher to be ready
+
         # 服务 client
         self._spade_cli = rospy.ServiceProxy("/spadingPose", spadingPose)
 
@@ -191,6 +207,21 @@ class ManualInterventionTester:
         self.log.info("manual_intervention_complete=True")
         self.nav_mock.set_mode(NavMode.NORMAL)
 
+    # ----------- TaskCtrl 指令发送 -------------
+    def send_ctrl_cmd(self, ctrl_cmd: int, task_id: int = 1):
+        """发送 TaskCtrl 命令"""
+        msg = TaskCtrl()
+        msg.taskID = task_id
+        msg.ctrlCmd = ctrl_cmd
+        msg.target_x = 0.0
+        msg.target_y = 0.0
+        msg.target_yaw = 0.0
+        msg.has_location = False
+        msg.timestamp = time.time()
+        self.ctrl_pub.publish(msg)
+        cmd_name = CTRL_CMD_NAMES.get(ctrl_cmd, "Unknown")
+        self.log.info("Sent TaskCtrl: ctrlCmd=%d (%s), taskID=%d", ctrl_cmd, cmd_name, task_id)
+
     # ----------- 状态回调 -------------
     def _status_cb(self, msg: String):
         t = msg.data
@@ -204,13 +235,24 @@ class ManualInterventionTester:
 
     # ----------- 帮助 -------------
     def _print_help(self):
-        print("\n"+"="*50)
-        print("Manual Intervention Tester")
-        print("="*50)
+        print("\n"+"="*60)
+        print("Manual Intervention + TaskCtrl Tester")
+        print("="*60)
+        print("=== Task Commands ===")
         print("  s : Send new Task (interactive)")
+        print("  e : EndTask (via scheduler/end_task)")
         print("  m : Manual intervention done (auto NORMAL)")
-        print("  e : EndTask      h : help      q : quit")
-        print("="*50)
+        print()
+        print("=== TaskCtrl Commands (ctrlCmd) ===")
+        print("  1 : 开始任务 (Start Task)")
+        print("  2 : 远程接管 (Remote Takeover)")
+        print("  3 : 避障停车 (Obstacle Stop)")
+        print("  4 : 紧急停车 (Emergency Stop)")
+        print("  5 : 继续任务 (Resume Task)")
+        print("  6 : 结束任务 (End Task)")
+        print()
+        print("  h : help      q : quit")
+        print("="*60)
 
 # -------------------- 主循环 ------------------------------
 
@@ -229,6 +271,9 @@ def main():
                 elif key=='e': tester.send_end()
                 elif key=='h': tester._print_help()
                 elif key=='q': break
+                elif key in ['1', '2', '3', '4', '5', '6']:
+                    # TaskCtrl 命令
+                    tester.send_ctrl_cmd(int(key))
                 elif key=='s':
                     # 暂时恢复终端，读取用户输入
                     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)

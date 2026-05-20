@@ -88,9 +88,11 @@ public:
     void setPauseTask(bool pause);
     void setEndTask(bool end);
     void setCancelTask(bool cancel);
+    void setStartTask(bool start);
     bool isPauseTask() const;
     bool isEndTask() const;
     bool isCancelTask() const;
+    bool isStartTask() const;
 
     // Task ID storage (int for atomic operations)
     void setTaskId(int task_id);
@@ -142,6 +144,7 @@ private:
     bool pause_task_ = false;
     bool end_task_ = false;
     bool cancel_task_ = false;
+    bool start_task_ = false;
     
     bool navigation_arrived_ = false;
     double distance_to_goal_ = 1000.0;
@@ -299,6 +302,15 @@ class CheckNewTask : public BT::ConditionNode
 {
 public:
     CheckNewTask(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+// 检查 start_flag，等待 ctrlCmd=1 开始任务
+class CheckStartTask : public BT::ConditionNode
+{
+public:
+    CheckStartTask(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
     static BT::PortsList providedPorts() { return {}; }
     BT::NodeStatus tick() override;
 };

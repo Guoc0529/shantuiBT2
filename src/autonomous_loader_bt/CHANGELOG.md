@@ -1,5 +1,70 @@
 # 代码修改记录
 
+## 2026-05-10: 新增 TaskCtrl 指令控制模块
+
+### 需求
+支持云端通过 `/task_ctrl_command` 话题下发控制指令，实现任务启动、暂停、继续、结束等功能。
+
+### Topic 列表
+
+| Topic | 类型 | 方向 | 说明 |
+|-------|------|------|------|
+| `/task_ctrl_command` | shuju/TaskCtrl | 订阅 | 云端下发控制指令 |
+
+### `shuju/TaskCtrl` 消息格式
+
+```bash
+# 字段说明
+int32 taskID          # 任务编号
+int32 ctrlCmd         # 控制指令码 (1-6)
+                      #   1: 开始任务
+                      #   2: 远程接管
+                      #   3: 避障停车
+                      #   4: 紧急停车
+                      #   5: 继续任务
+                      #   6: 结束任务
+float64 target_x      # 目标X坐标（米），仅当 ctrlCmd=3 时有效
+float64 target_y      # 目标Y坐标（米），仅当 ctrlCmd=3 时有效
+float64 target_yaw    # 目标航向角（弧度），仅当 ctrlCmd=3 时有效
+bool has_location     # 位置信息有效性标志
+float64 timestamp     # Unix 时间戳（秒）
+
+```
+
+### 实现内容
+
+1. **GlobalState 新增 start_task_ 标志**
+   - `setStartTask(bool start)` - 设置开始标志
+   - `isStartTask() const` - 获取开始标志
+
+2. **新增 CheckStartTask BT 节点**
+   - 等待 `start_task_=true` 后返回 SUCCESS
+   - 用于阻塞任务执行，直到收到 ctrlCmd=1
+
+3. **订阅 /task_ctrl_command 话题**
+   - ctrlCmd=1: 设置 `start_task_=true`
+   - ctrlCmd=2: 设置 `pause_task_=true`（远程接管）
+   - ctrlCmd=3: 设置 `pause_task_=true`（避障停车）
+   - ctrlCmd=4: 急停（待实现）
+   - ctrlCmd=5: 设置 `pause_task_=false`（继续任务）
+   - ctrlCmd=6: 设置 `end_task_=true`（结束任务）
+
+4. **行为树更新**
+   - 在 `SEQ_TASK_LOOP` 中添加 `<CheckStartTask/>` 节点
+   - 位于 `CheckNewTask` 之前，确保任务入队后等待开始指令
+
+### 使用流程
+
+```
+1. shuchuan 下发任务 → /liaodou 服务 → 任务入队 (hasNewTask=true)
+2. shuchuan 下发控制指令 → /task_ctrl_command (ctrlCmd=1)
+3. CheckStartTask 返回 SUCCESS
+4. CheckNewTask 返回 SUCCESS
+5. 任务开始执行
+```
+
+---
+
 ## 2026-04-27: 添加通用人工接管模块
 
 ### 需求

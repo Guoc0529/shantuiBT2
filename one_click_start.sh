@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # One-click launcher for the autonomous loader behavior-tree node and
-# its two test scripts.
+# its test scripts.
 #
-# ‑ Terminal 1: launches the state-machine (behavior-tree) using roslaunch.
-# ‑ Terminal 2: starts the two test scripts in separate tabs of a new window.
+# - Terminal 1: launches the state-machine (behavior-tree) using roslaunch.
+# - Terminal 2: starts the mock spading service.
+# - Terminal 3: starts the manual intervention tester (含 ctrlCmd 测试功能).
 # -----------------------------------------------------------------------------
 
 # --- Configuration -----------------------------------------------------------
@@ -50,5 +51,5 @@ open_terminal "Mock Spading Service" "cd $WS_DIR && source $SETUP_FILE && $TEST_
 echo "Waiting 2 seconds..."
 sleep 2
 
-echo "Launching manual intervention tester..."
+echo "Launching manual intervention tester (with TaskCtrl support)..."
 open_terminal "Manual Intervention" "cd $WS_DIR && source $SETUP_FILE && $TEST_CMD_2"

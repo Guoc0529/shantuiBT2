@@ -9,6 +9,7 @@
 #include <random>
 #include <cmath>
 #include <jsoncpp/json/json.h>
+#include <std_msgs/UInt8.h>
 
 namespace autonomous_loader_bt
 {
@@ -19,6 +20,42 @@ bool ConfigManager::loadConfig(const std::string& config_file)
 {
     try {
         config_ = YAML::LoadFile(config_file);
+        //打印yaml文件里面的cang位置坐标
+        // dou:
+        //   1:
+        //     frame_id: map
+        //     pose:
+        //       position: {x: -15.1643752129964, y: 14.382705442794364, z: -2.411174088532753}
+        //       orientation: {x: -0.020948652294491365, y: -0.00209537953141494, z: -0.9995324787922495, w: 0.022171765628500463}
+
+        // 打印yaml文件里面的dou位置坐标
+        for (const auto& cang_entry : config_["cang"]) {
+            std::string cang_id = cang_entry.first.as<std::string>();
+            const auto& pose_node = cang_entry.second["pose"];
+            if (pose_node) {
+                double x = pose_node["position"]["x"].as<double>();
+                double y = pose_node["position"]["y"].as<double>();
+                double z = pose_node["position"]["z"].as<double>();
+                ROS_INFO("Loaded cang %s position: x=%.2f, y=%.2f, z=%.2f", 
+                         cang_id.c_str(), x, y, z);
+            }
+        }
+
+         for (const auto& dou_entry : config_["dou"]) {
+            std::string dou_id = dou_entry.first.as<std::string>();
+            const auto& pose_node = dou_entry.second["pose"];
+            if (pose_node) {
+                double x = pose_node["position"]["x"].as<double>();
+                double y = pose_node["position"]["y"].as<double>();
+                double z = pose_node["position"]["z"].as<double>();
+                ROS_INFO("Loaded dou %s position: x=%.2f, y=%.2f, z=%.2f", 
+                         dou_id.c_str(), x, y, z);
+            }
+        }
+
+
+
+
         config_loaded_ = true;
         ROS_INFO("Successfully loaded config file: %s", config_file.c_str());
         return true;
@@ -306,6 +343,12 @@ void GlobalState::setCancelTask(bool cancel)
     cancel_task_ = cancel;
 }
 
+void GlobalState::setStartTask(bool start)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    start_task_ = start;
+}
+
 void GlobalState::setTaskId(int task_id)
 {
     current_task_id_.store(task_id);
@@ -332,6 +375,12 @@ bool GlobalState::isCancelTask() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return cancel_task_;
+}
+
+bool GlobalState::isStartTask() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return start_task_;
 }
 
 void GlobalState::setNavigationArrived(bool arrived)
@@ -600,6 +649,13 @@ BT::NodeStatus CheckNewTask::tick()
     return has_task ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
+BT::NodeStatus CheckStartTask::tick()
+{
+    bool can_start = GlobalState::getInstance().isStartTask();
+    ROS_INFO_THROTTLE(2.0, "[BT_DEBUG] CheckStartTask: isStartTask=%d", can_start);
+    return can_start ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
 BT::NodeStatus CheckNavigationArrived::tick()
 {
     std::string msg;
@@ -815,8 +871,8 @@ BT::NodeStatus WaitForManualIntervention::onRunning()
         ros::param::set("/autonomous_loader/manual_intervention_required", false);
 
         // 2. 解除急停
-        std_msgs::Bool estop_msg;
-        estop_msg.data = false;
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;
         // estop_pub_.publish(estop_msg);
         ROS_INFO("[BT] Manual intervention finished. E-Stop released.");
 
@@ -838,7 +894,7 @@ WaitForManualOverride::WaitForManualOverride(const std::string& name, const BT::
     intervention_sub_ = nh_.subscribe("/autonomous_loader/manual_intervention_complete", 1,
                                       &WaitForManualOverride::interventionCallback, this);
     vehicle_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/bt_override/vehicle_pose", 1, true);
-    estop_pub_ = nh_.advertise<std_msgs::Bool>("/ACU_EStop", 1);
+    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1);
 }
 
 void WaitForManualOverride::interventionCallback(const std_msgs::Bool::ConstPtr& msg)
@@ -878,18 +934,18 @@ BT::NodeStatus WaitForManualOverride::onRunning()
     if ((now - start_time_).toSec() > timeout_s_) {
         ROS_ERROR("[BT] Manual override timeout after %.1fs.", timeout_s_);
         ros::param::set("/autonomous_loader/manual_intervention_required", false);
-        std_msgs::Bool estop_msg;
-        estop_msg.data = false;
-        estop_pub_.publish(estop_msg);
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;
+        // estop_pub_.publish(estop_msg);
         return BT::NodeStatus::FAILURE;
     }
 
     // 检查接管完成信号
     if (intervention_complete_) {
         ros::param::set("/autonomous_loader/manual_intervention_required", false);
-        std_msgs::Bool estop_msg;
-        estop_msg.data = false;
-        estop_pub_.publish(estop_msg);
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;
+        // estop_pub_.publish(estop_msg);
         ROS_INFO("[BT] Manual override complete. E-Stop released.");
         intervention_complete_ = false;
         return BT::NodeStatus::SUCCESS;
@@ -902,9 +958,9 @@ void WaitForManualOverride::onHalted()
 {
     intervention_complete_ = false;
     ros::param::set("/autonomous_loader/manual_intervention_required", false);
-    std_msgs::Bool estop_msg;
-    estop_msg.data = false;
-    estop_pub_.publish(estop_msg);
+    std_msgs::UInt8 estop_msg;
+    estop_msg.data = 0;
+    // estop_pub_.publish(estop_msg);
 }
 
 
@@ -1462,8 +1518,8 @@ BT::NodeStatus RequestManualIntervention::tick()
     ROSTopicManager::getInstance().cancelMoveBaseGoal();
 
     // 1. 发布急停指令
-    std_msgs::Bool estop_msg;
-    estop_msg.data = true;
+    std_msgs::UInt8 estop_msg;
+    estop_msg.data = 1;
     // estop_pub_.publish(estop_msg);
     ROS_WARN("[BT] Emergency Stop Published!");
 
@@ -1493,6 +1549,7 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     factory.registerNodeType<CheckEndTask>("CheckEndTask");
     factory.registerNodeType<CheckPauseTask>("CheckPauseTask");
     factory.registerNodeType<CheckNewTask>("CheckNewTask");
+    factory.registerNodeType<CheckStartTask>("CheckStartTask");
     factory.registerNodeType<CheckNavigationArrived>("CheckNavigationArrived");
     factory.registerNodeType<CheckDistanceThreshold>("CheckDistanceThreshold");
     factory.registerNodeType<CheckScoopPointZero>("CheckScoopPointZero");
