@@ -1,5 +1,133 @@
 # 代码修改记录
 
+## 2026-05-12: 完善工作状态控制与行为树停止逻辑
+
+### 需求
+完善 TaskCtrl 指令控制，实现：
+1. 急停(4)、避障停车(5)、远程接管(6) 立即停止行为树
+2. 结束任务(6) 等待当前任务完成后停止行为树
+3. 根据任务类型正确设置工作状态
+4. 正常任务完成后变为空闲，保持2秒后开始新任务
+
+### 状态定义
+
+| 值 | 含义 | 触发时机 |
+|---|------|---------|
+| 1 | 空闲中 | 启动时、任务完成后等待新任务 |
+| 2 | 自动作业中 | 任务开始(type=0) |
+| 3 | 临时作业中 | 任务开始(type=1) |
+| 4 | 紧急停车中 | ctrlCmd=4，**立即 haltTree()** |
+| 5 | 避障停车中 | ctrlCmd=3，**立即 haltTree()** |
+| 6 | 远程接管中 | ctrlCmd=2，**立即 haltTree()** |
+| 7 | 结束作业中 | ctrlCmd=6，等待当前任务完成 |
+| 8 | 已结束 | 任务完成后自动设置，haltTree() |
+
+### 正常任务流程状态变化
+
+```
+任务完成 → state=1 (空闲)，计时2秒
+   ↓
+[2秒内有新任务] → state=2/3，开始执行
+[2秒后无新任务] → state=1 (保持空闲)
+```
+
+### 修改文件
+
+#### 1. `include/autonomous_loader_bt/loader_bt_nodes.h`
+
+**GlobalState 类新增方法:**
+```cpp
+void setEmergencyStop(bool stop);       // 设置急停标志
+void setIsEnding(bool ending);         // 设置"结束中"标志
+void setHaltRequested(bool halt);       // 请求停止行为树
+bool isEmergencyStop() const;           // 获取急停标志
+bool isEnding() const;                 // 获取"结束中"标志
+bool isHaltRequested() const;          // 获取停止请求
+void clearHaltRequested();              // 清除停止请求
+```
+
+**GlobalState 类新增成员变量:**
+```cpp
+bool emergency_stop_ = false;  // 急停标志
+bool is_ending_ = false;       // "结束中"标志
+bool halt_requested_ = false;  // 停止请求标志
+```
+
+#### 2. `src/loader_bt_nodes.cpp`
+
+**新增方法实现:**
+- `GlobalState::setEmergencyStop()`
+- `GlobalState::setIsEnding()`
+- `GlobalState::setHaltRequested()`
+- `GlobalState::isEmergencyStop()`
+- `GlobalState::isEnding()`
+- `GlobalState::isHaltRequested()`
+- `GlobalState::clearHaltRequested()`
+
+#### 3. `src/autonomous_loader_bt_node.cpp`
+
+**新增成员变量:**
+```cpp
+ros::Time idle_start_time_;        // 空闲计时开始时间
+bool idle_timer_started_ = false;  // 空闲计时是否已开始
+```
+
+**executeTree 修改:**
+```cpp
+// 每次 tick 前检查是否需要停止
+if (gs.isHaltRequested()) {
+    tree_.haltTree();
+    gs.clearHaltRequested();
+    idle_timer_started_ = false;
+}
+
+// tick 行为树...
+
+// 正常任务完成：设置 state=1，保持2秒
+if (status == IDLE || SUCCESS) {
+    if (!idle_timer_started_ && !gs.isEnding() && !gs.isPauseTask()) {
+        idle_start_time_ = ros::Time::now();
+        idle_timer_started_ = true;
+        TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+        ROS_INFO("[BT_ROOT] Task completed - state=1 (IDLE), 2s timer started");
+    }
+    // 2秒后有新任务则设为 2/3，无新任务保持 1
+}
+
+// 结束流程：is_ending_=true 时完成当前任务后 haltTree() 并设 state=8
+```
+
+### 执行流程
+
+**急停/避障/接管流程 (4/5/6):**
+```
+1. 收到 ctrlCmd=2/3/4
+2. 设置 halt_requested_=true
+3. 下次 tick: tree_.haltTree() 停止所有动作
+4. 状态上报为 6/5/4
+5. 收到 ctrlCmd=5: 清除标志，树恢复执行
+```
+
+**结束任务流程 (7→8):**
+```
+1. 收到 ctrlCmd=6
+2. 设置 end_task_=true, is_ending_=true
+3. 状态上报为 7 (结束作业中)
+4. 树继续执行完当前任务
+5. 任务完成后: tree_.haltTree()
+6. 状态上报为 8 (已结束)
+```
+
+**正常任务完成流程:**
+```
+1. 任务完成，tree_ 返回 IDLE
+2. 设置 state=1 (空闲)，启动2秒计时
+3. [2秒内有新任务] → cangdou 回调设 state=2/3
+4. [2秒后无新任务] → state=1 保持不变
+```
+
+---
+
 ## 2026-05-10: 新增 TaskCtrl 指令控制模块
 
 ### 需求

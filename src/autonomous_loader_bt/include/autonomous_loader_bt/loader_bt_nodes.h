@@ -26,11 +26,12 @@ struct Task
     int task_id;
     int bin_id;
     int hopper_id;
-    std::string task_type;
-    
-    Task() : task_id(0), bin_id(0), hopper_id(0) {}
-    Task(int id, int bin, int hopper, const std::string& type)
-        : task_id(id), bin_id(bin), hopper_id(hopper), task_type(type) {}
+    int task_type;
+    std::string task_type_str;
+
+    Task() : task_id(0), bin_id(0), hopper_id(0), task_type(0), task_type_str("auto") {}
+    Task(int id, int bin, int hopper, int type, const std::string& type_str = "scoop")
+        : task_id(id), bin_id(bin), hopper_id(hopper), task_type(type), task_type_str(type_str) {}
 };
 
 // 配置管理器
@@ -84,15 +85,22 @@ public:
     // Task start counter
     void incrementTasksStarted();
     int getTasksStarted() const;
-    
+
     void setPauseTask(bool pause);
     void setEndTask(bool end);
     void setCancelTask(bool cancel);
     void setStartTask(bool start);
+    void setEmergencyStop(bool stop);
+    void setIsEnding(bool ending);
+    void setHaltRequested(bool halt);
     bool isPauseTask() const;
     bool isEndTask() const;
     bool isCancelTask() const;
     bool isStartTask() const;
+    bool isEmergencyStop() const;
+    bool isEnding() const;
+    bool isHaltRequested() const;
+    void clearHaltRequested();
 
     // Task ID storage (int for atomic operations)
     void setTaskId(int task_id);
@@ -132,7 +140,26 @@ public:
     // Arm/Bucket action code APIs
     void setArmBucketCode(int code);
     int getArmBucketCode() const;
-    
+
+    // Navigation action cancel confirmation
+    void setNavCancelConfirmed(bool confirmed);
+    bool isNavCancelConfirmed() const;
+
+    // Work state APIs (2=auto, 3=temp)
+    void setWorkState(int state);
+    int getWorkState() const;
+
+    // ===== 避障相关 API =====
+    // obstacle_type: 0=无, 1=obstacle_1, 2=obstacle_2, 3=backstart
+    void setObstacleType(int type);
+    int getObstacleType() const;
+    void setObstacleTarget(const geometry_msgs::PoseStamped& target);
+    geometry_msgs::PoseStamped getObstacleTarget() const;
+    void setRestoreRequested(bool restore);
+    bool isRestoreRequested() const;
+    void setObstacleTriggered(bool triggered);
+    bool isObstacleTriggered() const;
+
 private:
     GlobalState() = default;
     mutable std::mutex mutex_;
@@ -145,9 +172,13 @@ private:
     bool end_task_ = false;
     bool cancel_task_ = false;
     bool start_task_ = false;
+    bool emergency_stop_ = false;
+    bool is_ending_ = false;
+    bool halt_requested_ = false;
     
     bool navigation_arrived_ = false;
     double distance_to_goal_ = 1000.0;
+    bool nav_cancel_confirmed_ = false;  // set true when action done callback fires after cancel
     geometry_msgs::PoseStamped current_pose_;
 
     // Distance reduction tracking for current navigation segment
@@ -169,6 +200,15 @@ private:
     
     // Arm/Bucket action code
     int arm_bucket_code_ = 0;
+
+    // Work state (2=auto working, 3=temp working)
+    int work_state_ = 2;  // default to auto working
+
+    // 避障相关状态
+    int obstacle_type_ = 0;  // 0=无, 1=obstacle_1, 2=obstacle_2, 3=backstart
+    geometry_msgs::PoseStamped obstacle_target_;
+    bool restore_requested_ = false;
+    bool obstacle_triggered_ = false;
 
     // Current task ID for status reporting
     std::atomic<int> current_task_id_{-1};
@@ -218,7 +258,7 @@ public:
         }
         
         if (old_state != state) {
-            ROS_INFO("[TaskStatusReporter] State changed: %d -> %d", old_state, state);
+            // ROS_INFO("[TaskStatusReporter] State changed: %d -> %d", old_state, state);
             report();  // 状态变更立即上报
         }
     }
@@ -239,7 +279,7 @@ public:
     }
 
 private:
-    TaskStatusReporter() : initialized_(false), current_state_(0), task_id_(-1) {}
+    TaskStatusReporter() : current_state_(0), task_id_(-1), initialized_(false) {}
 
     TaskStatusReporter(const TaskStatusReporter&) = delete;
     TaskStatusReporter& operator=(const TaskStatusReporter&) = delete;
@@ -453,6 +493,75 @@ public:
     BT::NodeStatus tick() override;
 };
 
+// ===== 避障相关节点 =====
+class CheckObstacleTriggered : public BT::ConditionNode
+{
+public:
+    CheckObstacleTriggered(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class CheckRestoreRequested : public BT::ConditionNode
+{
+public:
+    CheckRestoreRequested(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class HornAndHazard : public BT::SyncActionNode
+{
+public:
+    HornAndHazard(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class HazardLightsOff : public BT::SyncActionNode
+{
+public:
+    HazardLightsOff(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class SetObstacleTarget : public BT::SyncActionNode
+{
+public:
+    SetObstacleTarget(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class NavigateToObstacle : public BT::StatefulActionNode
+{
+public:
+    NavigateToObstacle(const std::string& name, const BT::NodeConfiguration& config) : BT::StatefulActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+private:
+    ros::Time start_time_;
+};
+
+class WaitForRestore : public BT::ConditionNode
+{
+public:
+    WaitForRestore(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+class ClearRestoreRequested : public BT::SyncActionNode
+{
+public:
+    ClearRestoreRequested(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
 class SetArmBucketState : public BT::SyncActionNode
 {
 public:
@@ -590,12 +699,38 @@ public:
     BT::NodeStatus tick() override;
 };
 
-class CancelNavigation : public BT::SyncActionNode
+class CancelNavigation : public BT::StatefulActionNode
 {
 public:
-    CancelNavigation(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
-    static BT::PortsList providedPorts() { return {}; }
-    BT::NodeStatus tick() override;
+    CancelNavigation(const std::string& name, const BT::NodeConfiguration& config)
+        : BT::StatefulActionNode(name, config), cancelled_(false) {}
+    static BT::PortsList providedPorts() {
+        return { BT::InputPort<double>("wait_s", 0.5, "Seconds to wait after cancel before returning SUCCESS") };
+    }
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override { cancelled_ = false; }
+private:
+    bool cancelled_;
+    ros::Time start_time_;
+    ros::Duration wait_duration_;
+};
+
+class WaitForNavigationCancelComplete : public BT::StatefulActionNode
+{
+public:
+    WaitForNavigationCancelComplete(const std::string& name, const BT::NodeConfiguration& config)
+        : BT::StatefulActionNode(name, config), waiting_(false) {}
+    static BT::PortsList providedPorts() {
+        return { BT::InputPort<double>("timeout_s", 2.0, "Max seconds to wait for cancel confirmation") };
+    }
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override { waiting_ = false; }
+private:
+    bool waiting_;
+    ros::Time start_time_;
+    ros::Duration timeout_duration_;
 };
 
 class CancelArmBucketAction : public BT::SyncActionNode

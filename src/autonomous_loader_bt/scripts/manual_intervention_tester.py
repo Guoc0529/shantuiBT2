@@ -90,17 +90,23 @@ class ManualInterventionMockNav:
     def _execute_cb(self, goal):
         mode = self._mode
 
-        # Immediately send planning feedback based on the mode
+        # 🛠️ 1. 核心修复：把提取坐标和计算距离的代码“提前”到这里！
+        gx, gy = goal.end_pose.pose.position.x, goal.end_pose.pose.position.y
+        dx, dy = gx - self._cur_x, gy - self._cur_y
+        dist = max(math.hypot(dx, dy), 0.1)
+
+        # 🛠️ 2. 发送初始的规划反馈，必须带上算好的 distance_to_goal=dist
         if mode in [NavMode.PLAN_FAIL, NavMode.RECOVERABLE_FAIL]:
-            planning_feedback = NavigateFeedback(plan_succeeded=False)
+            planning_feedback = NavigateFeedback(plan_succeeded=False, distance_to_goal=dist)
             self._srv.publish_feedback(planning_feedback)
         else:
-            planning_feedback = NavigateFeedback(plan_succeeded=True)
+            planning_feedback = NavigateFeedback(plan_succeeded=True, distance_to_goal=dist)
             self._srv.publish_feedback(planning_feedback)
 
+        # ---------- 下面的逻辑保持不变 ----------
         if mode == NavMode.PLAN_FAIL:
             self.log.warning("Simulating PLAN FAILURE for goal (%.2f, %.2f)",
-                          goal.end_pose.pose.position.x, goal.end_pose.pose.position.y)
+                          gx, gy)
             result = NavigateResult(success=False, 
                                     error_code=101, error_msg="Fatal: Global planner failed (mock)")
             self._srv.set_aborted(result, "planning failed (mock)")
@@ -108,15 +114,12 @@ class ManualInterventionMockNav:
 
         if mode == NavMode.RECOVERABLE_FAIL:
             self.log.warning("Simulating RECOVERABLE FAILURE for goal (%.2f, %.2f)",
-                          goal.end_pose.pose.position.x, goal.end_pose.pose.position.y)
+                          gx, gy)
             result = NavigateResult(success=False, 
                                     error_code=102, error_msg="Recoverable: Robot temporarily stuck (mock)")
             self._srv.set_aborted(result, "recoverable failure (mock)")
             return
 
-        gx, gy = goal.end_pose.pose.position.x, goal.end_pose.pose.position.y
-        dx, dy = gx - self._cur_x, gy - self._cur_y
-        dist = max(math.hypot(dx, dy), 0.1)
         duration = dist / self._speed
         st = rospy.Time.now()
         last_s = getattr(goal, "last_status", 2)
@@ -196,7 +199,6 @@ class ManualInterventionTester:
         msg = TaskCommand(task_id=task_id, bin_id=bin_id, hopper_id=hopper_id, task_type="scoop")
         self.task_pub.publish(msg)
         self.log.info("Sent Task #%d (bin=%d hopper=%d)", msg.task_id, msg.bin_id, msg.hopper_id)
-        self._req_scoop(msg.bin_id)
 
     def send_end(self):
         self.end_pub.publish(Bool(data=True))

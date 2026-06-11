@@ -20,7 +20,6 @@ mock_spading_service.py
 import rospy
 import sys
 import select
-
 import termios
 import tty
 import threading

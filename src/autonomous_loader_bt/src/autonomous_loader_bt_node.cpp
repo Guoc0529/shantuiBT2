@@ -18,6 +18,8 @@
 #include "shuju/TaskCtrl.h"
 #include <stdexcept> // 用于 std::runtime_error
 
+using namespace autonomous_loader_bt;
+
 // ---------------------------------------------------------------
 //  用于将 CMake 注入的宏转换为 C++ 字符串的辅助宏
 // ---------------------------------------------------------------
@@ -78,6 +80,9 @@ public:
         });
         topic_manager.setResultCallback([](const autonomous_loader_msgs::NavigateResult& result){
             autonomous_loader_bt::GlobalState::getInstance().setNavigationResult(result);
+        });
+        topic_manager.setNavCancelConfirmedCallback([](){
+            autonomous_loader_bt::GlobalState::getInstance().setNavCancelConfirmed(true);
         });
         topic_manager.setPlanningFeedbackCallback([](bool success){
             // Only set feedback if it hasn't been received yet for this goal
@@ -215,6 +220,16 @@ private:
         // TaskCtrl 话题订阅 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
         taskctrl_sub_ = nh_.subscribe("/task_ctrl_command", 10, &AutonomousLoaderBTNode::taskCtrlCallback, this);
         ROS_INFO("Subscribed to /task_ctrl_command for task control commands");
+
+        // 避障相关话题订阅
+        obstacle_1_sub_ = nh_.subscribe("/obstacle_1", 10, &AutonomousLoaderBTNode::obstacle1Callback, this);
+        obstacle_2_sub_ = nh_.subscribe("/obstacle_2", 10, &AutonomousLoaderBTNode::obstacle2Callback, this);
+        backstart_sub_ = nh_.subscribe("/backstart", 10, &AutonomousLoaderBTNode::backstartCallback, this);
+        restore_sub_ = nh_.subscribe("/restore", 10, &AutonomousLoaderBTNode::restoreCallback, this);
+        ROS_INFO("Subscribed to obstacle topics (/obstacle_1, /obstacle_2, /backstart, /restore)");
+
+        // 初始化鸣笛和双闪控制
+        ROSTopicManager::getInstance().initializeObstacleControls(nh_);
         
         // 服务端：接收调度下发任务
         task_service_ = nh_.advertiseService("liaodou", &AutonomousLoaderBTNode::taskServiceCallback, this);
@@ -258,17 +273,58 @@ private:
         static int tick_count = 0;
         tick_count++;
         try {
+            auto& gs = GlobalState::getInstance();
+
+            // Check if halt is requested (emergency stop, obstacle stop, or remote control)
+            if (gs.isHaltRequested()) {
+                tree_.haltTree();
+                gs.clearHaltRequested();
+                idle_timer_started_ = false;
+                ROS_INFO("[BT_ROOT] Halt requested - tree halted");
+            }
+
             BT::NodeStatus status = tree_.tickOnce();
-            if (tick_count % 100 == 0) {  // Every 10 seconds (100 ticks at 10Hz)
+            if (tick_count % 100 == 0) {
                 ROS_INFO_THROTTLE(10.0, "[BT_ROOT] Still running, tick #%d", tick_count);
             }
             publishStatus(status);
-            // publishWorkState(status);
 
-            // This logic is now handled in the Behavior Tree XML
-            // if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
-            //     tree_.haltTree();
-            // }
+            // Handle ending state: when task completes and is_ending_ is true, halt tree and set state=8
+            if (status == BT::NodeStatus::IDLE || status == BT::NodeStatus::SUCCESS) {
+                if (gs.isEnding()) {
+                    tree_.haltTree();
+                    gs.setIsEnding(false);
+                    TaskStatusReporter::instance().setState(TaskStatusReporter::ENDED);
+                    idle_timer_started_ = false;
+                    ROS_INFO("[BT_ROOT] Task ended - tree halted, state=8");
+                }
+            }
+
+            // Handle normal task completion: set state=1 (IDLE) for 2 seconds
+            if (status == BT::NodeStatus::IDLE || status == BT::NodeStatus::SUCCESS) {
+                // Check if we just completed a task (was RUNNING before)
+                if (!idle_timer_started_ && !gs.isEnding() && !gs.isPauseTask()) {
+                    idle_start_time_ = ros::Time::now();
+                    idle_timer_started_ = true;
+                    TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+                    ROS_INFO("[BT_ROOT] Task completed - state=1 (IDLE), 2s timer started");
+                }
+
+                // After 2 seconds, if new task exists, set state=2/3; otherwise keep state=1
+                if (idle_timer_started_) {
+                    ros::Duration elapsed = ros::Time::now() - idle_start_time_;
+                    if (elapsed.toSec() >= 2.0) {
+                        if (gs.hasNewTask()) {
+                            // New task arrived, will be set to 2/3 by cangdou callback
+                            idle_timer_started_ = false;
+                        }
+                        // else: keep state=1 (IDLE), waiting for new task
+                    }
+                }
+            } else if (status == BT::NodeStatus::RUNNING) {
+                // Tree is running, reset idle timer
+                idle_timer_started_ = false;
+            }
 
         } catch (const std::exception& e) {
             ROS_ERROR("Error executing behavior tree: %s", e.what());
@@ -290,52 +346,8 @@ private:
 
     BT::NodeStatus prev_bt_status_ = BT::NodeStatus::IDLE;
     ros::Time last_task_complete_time_;
-
-    void publishWorkState(BT::NodeStatus bt_status)
-    {
-        auto& state = autonomous_loader_bt::GlobalState::getInstance();
-
-        // Detect transition from a running state to an idle state, which signifies a task cycle has just finished.
-        if ((prev_bt_status_ == BT::NodeStatus::RUNNING) && (bt_status == BT::NodeStatus::IDLE || bt_status == BT::NodeStatus::SUCCESS))
-        {
-            // Only update the timestamp if we are not in a pause/end state.
-            if (!state.isPauseTask() && !state.isEndTask()) {
-                last_task_complete_time_ = ros::Time::now();
-                ROS_INFO("Task cycle finished. Entering 5-second cooldown (workstate=4).");
-            }
-        }
-        prev_bt_status_ = bt_status;
-
-        // Determine if we are inside the 5-second window after task completion
-        bool in_cooldown_window = false;
-        if(last_task_complete_time_.is_zero() == false)
-        {
-            ros::Duration dt = ros::Time::now() - last_task_complete_time_;
-            if (dt.toSec() < 5.0) {
-                in_cooldown_window = true;
-            }
-        }
-
-        int8_t work_state = 0; // Default to Idle
-
-        if (state.isPauseTask()) {
-            work_state = 2; // Paused
-        } else if (state.isEndTask()) {
-            work_state = (bt_status == BT::NodeStatus::IDLE || bt_status == BT::NodeStatus::SUCCESS) ? 4 : 3; // Ended or Ending
-        } else if (state.hasNewTask() || bt_status == BT::NodeStatus::RUNNING) {
-            work_state = 1; // Executing
-            // If we start a new task, cancel the cooldown window
-            last_task_complete_time_ = ros::Time(0);
-        } else if (in_cooldown_window) {
-            work_state = 4; // Just finished (cooldown)
-        } else {
-            work_state = 0; // Idle
-        }
-
-        std_msgs::Int8 msg; msg.data = work_state;
-        workstate_pub_.publish(msg);
-        nh_.setParam("/workstate", static_cast<int>(work_state));
-    }
+    ros::Time idle_start_time_;
+    bool idle_timer_started_ = false;
 
     // ========== ROS回调函数 ==========
 
@@ -367,7 +379,11 @@ private:
         }
 
         ROS_INFO("Received start task command - Task ID: %d, Bin: %d, Hopper: %d", msg->task_id, msg->bin_id, msg->hopper_id);
-        autonomous_loader_bt::Task task(msg->task_id, msg->bin_id, msg->hopper_id, msg->task_type);
+        int task_type = (msg->task_type == "auto" || msg->task_type == "scoop") ? 0 : 1;
+        int work_state = (task_type == 0) ? 2 : 3;  // 2=auto, 3=temp
+        ROS_INFO("[DEBUG] task_type=%d, setting work_state=%d", task_type, work_state);
+        autonomous_loader_bt::GlobalState::getInstance().setWorkState(work_state);
+        autonomous_loader_bt::Task task(msg->task_id, msg->bin_id, msg->hopper_id, task_type, msg->task_type);
         autonomous_loader_bt::GlobalState::getInstance().addTask(task);
         autonomous_loader_bt::GlobalState::getInstance().setTaskId(msg->task_id);
         autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(msg->task_id);
@@ -390,7 +406,7 @@ private:
 
     void taskCtrlCallback(const shuju::TaskCtrl::ConstPtr& msg)
     {
-        ROS_INFO("[TaskCtrl] Received: taskID=%d, ctrlCmd=%d, timestamp=%.1f",
+        ROS_INFO("\033[33m[TaskCtrl]\033[0m Received: taskID=%d, ctrlCmd=%d, timestamp=%.1f",
                  msg->taskID, msg->ctrlCmd, msg->timestamp);
 
         auto& gs = autonomous_loader_bt::GlobalState::getInstance();
@@ -398,36 +414,119 @@ private:
         switch (msg->ctrlCmd) {
             case 1:  // 开始任务
                 gs.setStartTask(true);
-                ROS_INFO("[TaskCtrl] ctrlCmd=1: Start task flag set");
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=1: Start task flag set");
                 break;
 
             case 2:  // 远程接管
                 gs.setPauseTask(true);
-                ROS_INFO("[TaskCtrl] ctrlCmd=2: Remote takeover - pause task");
+                gs.setHaltRequested(true);
+                TaskStatusReporter::instance().setState(TaskStatusReporter::REMOTE_CONTROL);
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=2: Remote takeover - halt BT, set state=6");
                 break;
 
-            case 3:  // 避障停车
-                gs.setPauseTask(true);
-                ROS_INFO("[TaskCtrl] ctrlCmd=3: Obstacle avoidance stop - pause task");
+            case 3:  // 避障停车（带坐标）
+                {
+                    geometry_msgs::PoseStamped obstacle_target;
+                    obstacle_target.header.stamp = ros::Time::now();
+                    obstacle_target.header.frame_id = "map";
+                    obstacle_target.pose.position.x = msg->target_x;
+                    obstacle_target.pose.position.y = msg->target_y;
+                    obstacle_target.pose.position.z = 0.0;
+                    // Convert yaw to quaternion
+                    double cy = cos(msg->target_yaw * 0.5);
+                    double sy = sin(msg->target_yaw * 0.5);
+                    obstacle_target.pose.orientation.w = cy;
+                    obstacle_target.pose.orientation.x = 0;
+                    obstacle_target.pose.orientation.y = 0;
+                    obstacle_target.pose.orientation.z = sy;
+
+                    gs.setObstacleTarget(obstacle_target);
+                    gs.setObstacleType(0);  // 0表示从TaskCtrl来的坐标
+                    gs.setObstacleTriggered(true);
+                    gs.setPauseTask(true);
+                    gs.setHaltRequested(true);
+                    TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
+                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=3: Obstacle stop with target (%.2f, %.2f, yaw=%.2f), state=5",
+                             msg->target_x, msg->target_y, msg->target_yaw);
+                }
                 break;
 
             case 4:  // 紧急停车
-                ROS_INFO("[TaskCtrl] ctrlCmd=4: Emergency stop - not implemented yet");
+                gs.setEmergencyStop(true);
+                gs.setPauseTask(true);
+                gs.setHaltRequested(true);
+                TaskStatusReporter::instance().setState(TaskStatusReporter::EMERGENCY_STOP);
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=4: Emergency stop - halt BT, set state=4");
                 break;
 
             case 5:  // 继续任务
                 gs.setPauseTask(false);
-                ROS_INFO("[TaskCtrl] ctrlCmd=5: Resume task");
+                gs.setEmergencyStop(false);
+                gs.clearHaltRequested();
+                gs.setRestoreRequested(true);
+                gs.setObstacleTriggered(false);
+                gs.setObstacleType(0);
+                TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume task - clear flags, restore obstacle state, set state=1");
                 break;
 
             case 6:  // 结束任务
                 gs.setEndTask(true);
-                ROS_INFO("[TaskCtrl] ctrlCmd=6: End task");
+                gs.setIsEnding(true);
+                TaskStatusReporter::instance().setState(TaskStatusReporter::ENDING);
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=6: End task - set state=7, will halt after current task completes");
                 break;
 
             default:
-                ROS_WARN("[TaskCtrl] Unknown ctrlCmd: %d", msg->ctrlCmd);
+                ROS_WARN("\033[33m[TaskCtrl]\033[0m Unknown ctrlCmd: %d", msg->ctrlCmd);
                 break;
+        }
+    }
+
+    // ===== 避障相关回调函数 =====
+    void obstacle1Callback(const std_msgs::Bool::ConstPtr& msg)
+    {
+        if (msg->data) {
+            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+            if (!gs.isObstacleTriggered()) {
+                gs.setObstacleTriggered(true);
+                gs.setObstacleType(1);  // obstacle_1
+                ROS_INFO("[Obstacle] /obstacle_1 triggered, obstacle_type=1");
+            }
+        }
+    }
+
+    void obstacle2Callback(const std_msgs::Bool::ConstPtr& msg)
+    {
+        if (msg->data) {
+            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+            if (!gs.isObstacleTriggered()) {
+                gs.setObstacleTriggered(true);
+                gs.setObstacleType(2);  // obstacle_2
+                ROS_INFO("[Obstacle] /obstacle_2 triggered, obstacle_type=2");
+            }
+        }
+    }
+
+    void backstartCallback(const std_msgs::Bool::ConstPtr& msg)
+    {
+        if (msg->data) {
+            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+            if (!gs.isObstacleTriggered()) {
+                gs.setObstacleTriggered(true);
+                gs.setObstacleType(3);  // backstart
+                ROS_INFO("[Obstacle] /backstart triggered, obstacle_type=3");
+            }
+        }
+    }
+
+    void restoreCallback(const std_msgs::Bool::ConstPtr& msg)
+    {
+        if (msg->data) {
+            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+            gs.setRestoreRequested(true);
+            gs.setObstacleTriggered(false);
+            ROS_INFO("[Obstacle] /restore triggered, restore requested");
         }
     }
 
@@ -466,15 +565,19 @@ private:
             return true;
         }
 
-        ROS_INFO("Received service task: taskID=%d, bin=%d, hopper=%d", req.taskID, req.cang, req.dou);
-        autonomous_loader_bt::Task task(req.taskID, req.cang, req.dou, "scoop");
-        autonomous_loader_bt::GlobalState::getInstance().addTask(task);
-        autonomous_loader_bt::GlobalState::getInstance().setTaskId(req.taskID);
-        autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(req.taskID);
+        ROS_INFO("Received service task: taskID=%d, type=%d, bin=%d, hopper=%d", req.taskID, req.type, req.cang, req.dou);
+        ROS_INFO("[DEBUG] req.type=%d, setting state=%s", req.type, req.type == 0 ? "2(AUTO_WORKING)" : "3(TEMP_WORKING)");
+        std::string type_str = (req.type == 0) ? "auto" : "temp";
+        Task task(req.taskID, req.cang, req.dou, req.type, type_str);
+        GlobalState::getInstance().addTask(task);
+        GlobalState::getInstance().setTaskId(req.taskID);
+        TaskStatusReporter::instance().setTaskId(req.taskID);
 
+        // 根据任务类型设置工作状态
+        int work_state = (req.type == 0) ? TaskStatusReporter::AUTO_WORKING : TaskStatusReporter::TEMP_WORKING;
+        TaskStatusReporter::instance().setState(work_state);
         nh_.setParam("canggoal", static_cast<int>(req.cang));
         res.huiying = true;
-        // The workstate will be set to 1 by the publishWorkState function on the next tick
         return true;
     }
 
@@ -490,6 +593,10 @@ private:
     ros::Subscriber pause_task_sub_;
     ros::Subscriber end_task_sub_;
     ros::Subscriber taskctrl_sub_;
+    ros::Subscriber obstacle_1_sub_;
+    ros::Subscriber obstacle_2_sub_;
+    ros::Subscriber backstart_sub_;
+    ros::Subscriber restore_sub_;
     
     ros::ServiceServer task_service_;
     
@@ -507,7 +614,9 @@ int main(int argc, char** argv)
     
     ROS_INFO("Autonomous loader robot behavior tree node started");
     
-    ros::spin();
-    
+    ros::AsyncSpinner spinner(1);
+    spinner.start();
+    ros::waitForShutdown();
+
     return 0;
 }

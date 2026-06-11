@@ -9,6 +9,12 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <sys/stat.h>
+#include <map>
+#include <csignal>
 
 // ## 结构体定义 ##
 
@@ -147,6 +153,80 @@ static double quaternionToYaw(const geometry_msgs::Quaternion& q) {
     return std::atan2(siny_cosp, cosy_cosp);
 }
 
+// 获取当前时间戳字符串（用于文件名）
+static std::string getTimestampForFilename() {
+    time_t now = time(nullptr);
+    struct tm* tm_info = localtime(&now);
+    char buffer[32];
+    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", tm_info);
+    return std::string(buffer);
+}
+
+// 获取带毫秒的时间戳字符串（用于日志内容）
+static std::string getTimestampWithMs() {
+    ros::Time now = ros::Time::now();
+    time_t sec = now.sec;
+    struct tm* tm_info = localtime(&sec);
+    char date_buffer[32];
+    strftime(date_buffer, sizeof(date_buffer), "%Y-%m-%d %H:%M:%S", tm_info);
+    int ms = now.nsec / 1000000;
+    char full_buffer[64];
+    snprintf(full_buffer, sizeof(full_buffer), "%s.%03d", date_buffer, ms);
+    return std::string(full_buffer);
+}
+
+// 创建目录（递归创建）
+static bool createDirectory(const std::string& path) {
+    std::string cmd = "mkdir -p " + path;
+    return system(cmd.c_str()) == 0;
+}
+
+// 障碍物类型枚举
+enum class ObstacleType : int {
+    NONE = 0,
+    PEDESTRIAN = 1,
+    VEHICLE = 2,
+    OTHER = 3,
+    PATH_INTRUSION = 4
+};
+
+// 触发的障碍物信息结构体（用于日志记录）
+struct TriggeredObstacleInfo {
+    bool valid;
+    ObstacleType type;
+    double min_dist;
+    double obs_x, obs_y;
+    double veh_x, veh_y, veh_yaw;
+    std::string rule_type;
+    int confirm_count;
+};
+
+// 单条日志记录
+struct LogRecord {
+    std::string timestamp;
+    double min_dist;
+    double obs_x, obs_y;
+    double veh_x, veh_y, veh_yaw;
+};
+
+// 单个规则的日志数据
+struct RuleLogData {
+    std::vector<LogRecord> records;
+    double global_min = 9999.0;      // 初始化为大值，C/D跳过规则使用-1
+    ros::Time last_save_time;
+};
+
+// 前向声明
+class ObstacleAvoider;
+
+// 全局实例指针，用于信号处理
+static ObstacleAvoider* g_avoider_instance = nullptr;
+
+// 前向声明 signalHandler（定义在类之后）
+void signalHandler(int sig);
+
+class ObstacleAvoider;
+
 class ObstacleAvoider
 {
 public:
@@ -155,6 +235,7 @@ public:
         emergency_stop_hold_time_(ros::Time())
     {
         loadParams();
+        initLogging();
 
         estop_pub_ = nh_.advertise<std_msgs::UInt8>(topics_["estop"], 1);
         horn_pub_ = nh_.advertise<std_msgs::UInt8>(topics_["horn"], 1);
@@ -164,6 +245,14 @@ public:
         pointcloud_sub_ = nh_.subscribe(topics_["pointcloud"], 1, &ObstacleAvoider::pointcloudCallback, this);
 
         ROS_INFO("Obstacle Avoider started with unified min-distance collision detection.");
+
+        // 注册全局实例和信号处理
+        g_avoider_instance = this;
+        signal(SIGINT, signalHandler);
+    }
+
+    ~ObstacleAvoider() {
+        finalizeLogging();
     }
 
     void run()
@@ -203,6 +292,10 @@ private:
         // 鸣笛参数
         public_nh.param("horn/enabled", horn_params_.enabled, true);
         public_nh.param("horn/min_distance", horn_params_.min_distance, 20.0);
+        public_nh.param("log_save_interval", log_save_interval_, 1.0);
+        public_nh.param("skip_log_console_interval", skip_log_console_interval_, 1.0);
+        public_nh.param("rule_a_confirm_frames", rule_a_confirm_frames_, 2);
+        public_nh.param("rule_b_confirm_frames", rule_b_confirm_frames_, 2);
 
         public_nh.getParam("stockyard_pointcloud_disable_states", stockyard_pointcloud_disable_states_);
         public_nh.param("arm_raising_state", arm_raising_state_, 4);
@@ -217,6 +310,8 @@ private:
     void perceptionCallback(const lidar_camera_fusion::PerceptInfo::ConstPtr& msg) {
         std::lock_guard<std::mutex> lock(data_mutex_);
         percept_info_ = *msg;
+        // ======= 【新增这一行：只要Bag在放，这里就会疯狂更新】 =======
+        last_perception_recv_time_ = ros::Time::now(); 
     }
     void pointcloudCallback(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& msg) {
         std::lock_guard<std::mutex> lock(data_mutex_);
@@ -292,6 +387,14 @@ private:
                             const OrientedRect& vehicle_rect) {
         double local_x, local_y;
         getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
+
+        if (obstacle.length > 0.0 && obstacle.width > 0.0) {
+            OrientedRect obs_rect(local_x, local_y, obstacle.yaw,
+                                  obstacle.length, obstacle.width);
+            obs_rect.computeCorners();
+            return minDistanceBetweenRects(vehicle_rect, obs_rect);
+        }
+
         Point2D obs_point(local_x, local_y);
         return minDistancePointToRect(obs_point, vehicle_rect);
     }
@@ -315,6 +418,8 @@ private:
     }
 
     // ## 主检测函数：统一逻辑处理所有障碍物
+// ## 主检测函数：统一逻辑处理所有障碍物
+// ## 主检测函数：统一逻辑处理所有障碍物
     void checkObstacles()
     {
         // 1. 获取数据
@@ -326,69 +431,127 @@ private:
         self_info.loc.y = (self_info.loc.y / 20.0) - 90.169417;
         data_mutex_.unlock();
 
+        // ======= 【修改后的超时保护：使用接收时间差判断】 =======
+        ros::Time now = ros::Time::now(); // 这里的 now 保留
+        if (!last_perception_recv_time_.isZero() && (now - last_perception_recv_time_).toSec() > 0.5) {
+            ROS_WARN_THROTTLE(2.0, "[Timeout] Bag paused or topic stopped! Skipping obstacle check.");
+            resetConfirmationCounter(); 
+            return; 
+        }
+        // ========================================================
+
         int arm_bucket_state = 0;
         ros::param::get("/ArmBucketState", arm_bucket_state);
 
         bool is_in_stockyard = self_info.loc.x > stockyard_x_threshold_;
         bool arm_is_raising = (arm_bucket_state == arm_raising_state_);
+        bool disable_pointcloud_in_current_state =
+            is_in_stockyard &&
+            std::find(stockyard_pointcloud_disable_states_.begin(),
+                      stockyard_pointcloud_disable_states_.end(),
+                      arm_bucket_state) != stockyard_pointcloud_disable_states_.end();
 
-        // 2. 构建车辆旋转矩形
-        OrientedRect vehicle_rect(0, 0, self_info.yaw, vehicle_model_.length, vehicle_model_.width);
+        // 3. 构建车辆局部坐标系下的车体矩形（车体坐标系中车身朝向恒为 0）
+        OrientedRect vehicle_rect(0, 0, 0.0, vehicle_model_.length, vehicle_model_.width);
         vehicle_rect.computeCorners();
 
         bool estop_triggered = false;  // 本次循环是否触发了急停
         bool horn_triggered = false;   // 本次循环是否触发了鸣笛
+        TriggeredObstacleInfo obs_info;    // 本次触发的障碍物信息
+        obs_info.valid = false;
+        obs_info.confirm_count = 0;
 
-        // 3. 处理 PerceptInfo.obstacles
+        // 4. 处理 PerceptInfo.obstacles
         for (const auto& obs : self_info.obstacles) {
-            if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+            if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered, &obs_info)) {
                 estop_triggered = true;
                 break;
             }
         }
 
-        // 4. 处理 PerceptInfo.originObss
+        // 5. 处理 PerceptInfo.originObss
         if (!estop_triggered) {
             for (const auto& obs : self_info.originObss) {
-                if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+                if (processObstacle(obs, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered, &obs_info)) {
                     estop_triggered = true;
                     break;
                 }
             }
         }
 
-        // 5. 处理 jsk_bboxes
+        // 6. 处理 jsk_bboxes
         if (!estop_triggered) {
             for (const auto& bbox : bbox_obstacles.boxes) {
-                if (processObstacle(bbox, path, self_info, vehicle_rect, is_in_stockyard, arm_is_raising, horn_triggered)) {
+                if (processObstacle(bbox, path, self_info, vehicle_rect, disable_pointcloud_in_current_state, arm_is_raising, horn_triggered, &obs_info)) {
                     estop_triggered = true;
                     break;
                 }
             }
+        }
+
+        // 6.5 如果没有障碍物命中，清除确认状态
+        // 如果本轮循环没有触发 Rule_B，则单独清空 Rule_B 的连续帧计数
+        if (rule_counters_.find("Rule_B") != rule_counters_.end()) {
+            // 检查当前这次大循环里，Rule_B 是否被 processObstacle 真正访问并加过计数
+            // 如果这一帧的计数并没有随着循环增长，说明这一帧没有障碍物威胁到车体边界，清除它
+            static int last_b_count = 0;
+            if (rule_counters_["Rule_B"] == last_b_count) {
+                rule_counters_["Rule_B"] = 0;
+            }
+            last_b_count = rule_counters_["Rule_B"];
+        }
+
+        // 同理，如果本轮循环没有触发 Rule_A，则单独清空 Rule_A 的连续帧计数
+        if (rule_counters_.find("Rule_A") != rule_counters_.end()) {
+            static int last_a_count = 0;
+            if (rule_counters_["Rule_A"] == last_a_count) {
+                rule_counters_["Rule_A"] = 0;
+            }
+            last_a_count = rule_counters_["Rule_A"];
+        }
+        
+        if (rule_counters_.find("Rule_A_PEDESTRIAN") != rule_counters_.end()) {
+            static int last_a_ped_count = 0;
+            if (rule_counters_["Rule_A_PEDESTRIAN"] == last_a_ped_count) {
+                rule_counters_["Rule_A_PEDESTRIAN"] = 0;
+            }
+            last_a_ped_count = rule_counters_["Rule_A_PEDESTRIAN"];
+        }
+
+        // 6.6 如果触发了急停，按规则限频记录日志
+        if (estop_triggered && obs_info.valid) {
+            LogRecord record;
+            record.timestamp = getTimestampWithMs();
+            record.min_dist = obs_info.min_dist;
+            record.obs_x = obs_info.obs_x;
+            record.obs_y = obs_info.obs_y;
+            record.veh_x = obs_info.veh_x;
+            record.veh_y = obs_info.veh_y;
+            record.veh_yaw = obs_info.veh_yaw;
+
+            saveRuleLogWithThrottle(obs_info.rule_type, record, obs_info.min_dist);
         }
 
         // 6. 急停保持机制：当前时刻急停且保持时间有效
         bool estop_final = false;
-        ros::Time now = ros::Time::now();
+        // ros::Time now = ros::Time::now();
 
         if (estop_triggered) {
             // 立即触发急停，更新保持时间起点
             emergency_stop_hold_time_ = now;
             estop_final = true;
         } else if (emergency_stop_hold_duration_ > 0.0 && !emergency_stop_hold_time_.isZero()) {
-            // 检查是否在保持时间内
+            // Check if still within hold duration
             double elapsed = (now - emergency_stop_hold_time_).toSec();
             if (elapsed < emergency_stop_hold_duration_) {
-                // 仍在保持时间内，继续急停
                 estop_final = true;
                 if (elapsed < emergency_stop_hold_duration_ * 0.5) {
-                    ROS_INFO_THROTTLE(1.0, "[急停保持] 障碍物已消失，保持急停中 (%.1f/%.1f秒)",
+                    ROS_INFO_THROTTLE(1.0, "[E-Stop Hold] Obstacle cleared, holding stop (%.1f/%.1fs)",
                                       elapsed, emergency_stop_hold_duration_);
                 }
             } else {
-                // 超过保持时间，重置
                 emergency_stop_hold_time_ = ros::Time();
-                ROS_INFO("[急停保持] 超过保持时间，解除急停");
+                ROS_INFO("[E-Stop Hold] Duration exceeded, releasing stop");
             }
         }
 
@@ -409,57 +572,190 @@ private:
         horn_pub_.publish(horn_msg);
     }
 
+    bool updateConfirmationCounter(const std::string& rule_type, int required_frames, int& counter,
+        double obs_x, double obs_y) {
+    if (required_frames <= 1) {
+    counter = 1;
+    return true;
+    }
+    // 针对当前触发的规则类型独立累加
+    rule_counters_[rule_type]++; 
+    counter = rule_counters_[rule_type];
+    return counter >= required_frames;
+    }
+
+    void resetConfirmationCounter() {
+    rule_counters_.clear(); // 清空所有规则的计数
+    }
+
+    void saveRuleLogWithThrottle(const std::string& rule_type, const LogRecord& record, double min_dist_for_global_min) {
+        auto it = rule_logs_.find(rule_type);
+        if (it == rule_logs_.end()) {
+            RuleLogData data;
+            data.global_min = min_dist_for_global_min;
+            data.last_save_time = ros::Time(0);
+            rule_logs_[rule_type] = data;
+            it = rule_logs_.find(rule_type);
+        }
+
+        if (min_dist_for_global_min < it->second.global_min) {
+            it->second.global_min = min_dist_for_global_min;
+        }
+
+        ros::Time now_for_log = ros::Time::now();
+        bool should_save_log = it->second.last_save_time.isZero() ||
+                               (now_for_log - it->second.last_save_time).toSec() >= log_save_interval_;
+        if (!should_save_log) {
+            return;
+        }
+
+        it->second.records.push_back(record);
+        it->second.last_save_time = now_for_log;
+        ROS_INFO("[Log] Saved to %s.log (count: %zu)", rule_type.c_str(), it->second.records.size());
+    }
+
     // ## 统一障碍物处理逻辑
     // 返回 true 表示触发了急停，false 表示未触发
     // 通过引用参数 horn_triggered 返回是否触发鸣笛
+    // 通过 obs_info 输出障碍物信息用于日志记录
     template<typename T>
     bool processObstacle(const T& obstacle, const nav_msgs::Path& path,
                         const lidar_camera_fusion::PerceptInfo& self_info,
                         const OrientedRect& vehicle_rect,
-                        bool is_in_stockyard, bool arm_is_raising,
-                        bool& horn_triggered)
+                        bool skip_pointcloud_for_current_state, bool arm_is_raising,
+                        bool& horn_triggered,
+                        TriggeredObstacleInfo* obs_info = nullptr)
     {
-        // --- 跳过条件 ---
-        // Rule D: 臂举升时忽略正前方障碍物
+        // --- Skip conditions ---
+        // Rule D: Ignore front obstacles when arm is raising
         if (arm_is_raising && isInFront(obstacle, self_info)) {
+            double local_x, local_y;
+            getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
+            ROS_INFO_THROTTLE(skip_log_console_interval_, "[Rule D] Skip front obstacle while arm raising: local=(%.2f, %.2f)",
+                              local_x, local_y);
+
+            double obs_x, obs_y;
+            getGlobalCoordsFromObstacle(obstacle, self_info, obs_x, obs_y);
+            LogRecord record;
+            record.timestamp = getTimestampWithMs();
+            record.min_dist = -1.0;
+            record.obs_x = obs_x;
+            record.obs_y = obs_y;
+            record.veh_x = self_info.loc.x;
+            record.veh_y = self_info.loc.y;
+            record.veh_yaw = self_info.yaw;
+            saveRuleLogWithThrottle("Rule_D", record, -1.0);
             return false;
         }
 
-        // Rule C: 点云障碍物在料场内时跳过
-        if (std::is_same<T, jsk_recognition_msgs::BoundingBox>::value && is_in_stockyard) {
+        // Rule C: Skip pointcloud obstacles in configured stockyard states
+        if (std::is_same<T, jsk_recognition_msgs::BoundingBox>::value && skip_pointcloud_for_current_state) {
+            double local_x, local_y;
+            getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
+            ROS_INFO_THROTTLE(skip_log_console_interval_,
+                              "[Rule C] Skip pointcloud obstacle in stockyard state: local=(%.2f, %.2f)",
+                              local_x, local_y);
+
+            double obs_x, obs_y;
+            getGlobalCoordsFromObstacle(obstacle, self_info, obs_x, obs_y);
+            LogRecord record;
+            record.timestamp = getTimestampWithMs();
+            record.min_dist = -1.0;
+            record.obs_x = obs_x;
+            record.obs_y = obs_y;
+            record.veh_x = self_info.loc.x;
+            record.veh_y = self_info.loc.y;
+            record.veh_yaw = self_info.yaw;
+            saveRuleLogWithThrottle("Rule_C", record, -1.0);
             return false;
         }
 
-        // --- 计算最小距离 ---
+        // --- Compute min distance ---
         double min_dist = computeMinDistance(obstacle, self_info, vehicle_rect);
         int classid = getObstacleClass(obstacle);
+        double local_x, local_y;
+        getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
 
-        // --- Rule B: 车身边界判断（最小距离 <= 0 表示重叠）---
+        // --- Rule B: Body boundary check (min_dist <= 0 means overlap) ---
         if (min_dist <= safety_thresholds_.body_proximity) {
-            if (classid == 0) {
-                ROS_WARN("[Rule B] 行人距离车辆过近！最小距离: %.2fm. 急停.", min_dist);
-            } else if (classid == 1) {
-                ROS_WARN("[Rule B] 车辆距离车辆过近！最小距离: %.2fm. 急停.", min_dist);
-            } else {
-                ROS_WARN("[Rule B] 障碍物距离车辆过近！最小距离: %.2fm. 急停.", min_dist);
+        // if (false) {
+            int confirm_count = 0;
+            bool confirmed = updateConfirmationCounter("Rule_B", rule_b_confirm_frames_, confirm_count,
+                                                      local_x, local_y);
+            ROS_WARN_THROTTLE(1.0,
+                              "[Rule B] Candidate hit %d/%d, min_dist=%.2fm local=(%.2f, %.2f)",
+                              confirm_count, std::max(1, rule_b_confirm_frames_), min_dist, local_x, local_y);
+
+            if (confirmed && classid == 0) {
+                ROS_WARN("[Rule B] Pedestrian too close! min_dist=%.2fm local=(%.2f, %.2f). E-Stop.",
+                         min_dist, local_x, local_y);
+            } else if (confirmed && classid == 1) {
+                ROS_WARN("[Rule B] Vehicle too close! min_dist=%.2fm local=(%.2f, %.2f). E-Stop.",
+                         min_dist, local_x, local_y);
+            } else if (confirmed) {
+                ROS_WARN("[Rule B] Obstacle too close! min_dist=%.2fm local=(%.2f, %.2f). E-Stop.",
+                         min_dist, local_x, local_y);
             }
-            return true;
+
+            // Fill obstacle info for logging
+            if (obs_info && confirmed) {
+                obs_info->valid = true;
+                obs_info->min_dist = min_dist;
+                obs_info->rule_type = "Rule_B";
+                obs_info->confirm_count = confirm_count;
+                obs_info->type = (classid == 0) ? ObstacleType::PEDESTRIAN :
+                                 (classid == 1) ? ObstacleType::VEHICLE : ObstacleType::OTHER;
+                double obs_x, obs_y;
+                getGlobalCoordsFromObstacle(obstacle, self_info, obs_x, obs_y);
+                obs_info->obs_x = obs_x;
+                obs_info->obs_y = obs_y;
+                obs_info->veh_x = self_info.loc.x;
+                obs_info->veh_y = self_info.loc.y;
+                obs_info->veh_yaw = self_info.yaw;
+            }
+
+            return confirmed;
         }
 
-        // --- Rule A: 路径入侵判断 ---
+        // --- Rule A: Path intrusion check ---
         if (isOnPath(obstacle, path, self_info)) {
-            // 鸣笛判断：行人 + 鸣笛功能启用 + 距离条件
             bool should_horn = horn_params_.enabled &&
                               classid == 0 &&
                               min_dist < horn_params_.min_distance;
+            const std::string confirmed_rule_type = should_horn ? "Rule_A_PEDESTRIAN" : "Rule_A";
+            int confirm_count = 0;
+            bool confirmed = updateConfirmationCounter(confirmed_rule_type, rule_a_confirm_frames_, confirm_count,
+                                                    local_x, local_y);
+            ROS_WARN_THROTTLE(1.0,
+                              "[Rule A] Candidate hit %d/%d, min_dist=%.2fm local=(%.2f, %.2f)",
+                              confirm_count, std::max(1, rule_a_confirm_frames_), min_dist, local_x, local_y);
 
-            if (should_horn) {
-                ROS_WARN("[Rule A] 行人在路径上！最小距离: %.2fm. 鸣笛+急停.", min_dist);
+            if (confirmed && should_horn) {
+                ROS_WARN("[Rule A] Pedestrian on path! min_dist=%.2fm local=(%.2f, %.2f). Horn+Stop.",
+                         min_dist, local_x, local_y);
                 horn_triggered = true;
-            } else {
-                ROS_WARN("[Rule A] 障碍物入侵路径走廊！最小距离: %.2fm. 急停.", min_dist);
+            } else if (confirmed) {
+                ROS_WARN("[Rule A] Obstacle in path corridor! min_dist=%.2fm local=(%.2f, %.2f). E-Stop.",
+                         min_dist, local_x, local_y);
             }
-            return true;
+
+            // Fill obstacle info for logging
+            if (obs_info && confirmed) {
+                obs_info->valid = true;
+                obs_info->min_dist = min_dist;
+                obs_info->rule_type = confirmed_rule_type;
+                obs_info->confirm_count = confirm_count;
+                obs_info->type = (classid == 0) ? ObstacleType::PATH_INTRUSION : ObstacleType::OTHER;
+                double obs_x, obs_y;
+                getGlobalCoordsFromObstacle(obstacle, self_info, obs_x, obs_y);
+                obs_info->obs_x = obs_x;
+                obs_info->obs_y = obs_y;
+                obs_info->veh_x = self_info.loc.x;
+                obs_info->veh_y = self_info.loc.y;
+                obs_info->veh_yaw = self_info.yaw;
+            }
+
+            return confirmed;
         }
 
         return false;
@@ -478,16 +774,111 @@ private:
     HornParams horn_params_;
     std::vector<int> stockyard_pointcloud_disable_states_;
     int arm_raising_state_;
+    double log_save_interval_;
+    double skip_log_console_interval_;
+    int rule_a_confirm_frames_;
+    int rule_b_confirm_frames_;
+    std::map<std::string, int> rule_counters_;
+    ros::Time last_perception_recv_time_; 
 
     // 急停保持机制
-    double emergency_stop_hold_duration_;  // 急停保持时间（秒）
-    ros::Time emergency_stop_hold_time_;   // 上次急停触发时间
+    double emergency_stop_hold_duration_;  // E-stop hold duration (seconds)
+
+    // 急停保持机制
+    ros::Time emergency_stop_hold_time_;   // Last e-stop trigger time
 
     std::mutex data_mutex_;
     nav_msgs::Path current_path_;
     lidar_camera_fusion::PerceptInfo percept_info_;
     jsk_recognition_msgs::BoundingBoxArray bbox_array_;
+
+    // ===== Logging related =====
+public:
+    void finalizeLogging();  // Called by signal handler
+
+private:
+    void initLogging() {
+        if (!createDirectory(log_directory_)) {
+            ROS_WARN("[Log] Failed to create base directory: %s", log_directory_.c_str());
+            return;
+        }
+
+        session_dir_ = log_directory_ + "/" + getTimestampForFilename();
+        if (!createDirectory(session_dir_)) {
+            ROS_WARN("[Log] Failed to create session directory: %s", session_dir_.c_str());
+            return;
+        }
+
+        ROS_INFO("[Log] Log directory initialized: %s", session_dir_.c_str());
+    }
+
+    std::string session_dir_;                              // Session log directory
+    std::string log_directory_;                           // Base log directory
+    std::map<std::string, RuleLogData> rule_logs_;         // Logs per rule
 };
+
+// Implementation of finalizeLogging (needs class definition first)
+void ObstacleAvoider::finalizeLogging() {
+    if (session_dir_.empty()) return;
+
+    ROS_INFO("[Log] Writing log summaries to session: %s", session_dir_.c_str());
+
+    for (const auto& pair : rule_logs_) {
+        const std::string& rule_type = pair.first;
+        const RuleLogData& data = pair.second;
+
+        if (data.records.empty()) continue;
+
+        std::string filepath = session_dir_ + "/" + rule_type + ".log";
+        std::ofstream out_file;
+        out_file.open(filepath, std::ios::out);
+
+        if (!out_file.is_open()) {
+            ROS_WARN("[Log] Failed to write log file: %s", filepath.c_str());
+            continue;
+        }
+
+        // Write header
+        out_file << "========================================" << std::endl;
+        out_file << "Rule Type: " << rule_type << std::endl;
+        out_file << "Total Records: " << data.records.size() << std::endl;
+        out_file << "========================================" << std::endl;
+        out_file << std::endl;
+
+        // Write each record
+        for (size_t i = 0; i < data.records.size(); ++i) {
+            const LogRecord& rec = data.records[i];
+            out_file << "--- Record " << (i + 1) << " ---" << std::endl;
+            out_file << "Timestamp: " << rec.timestamp << std::endl;
+            out_file << "Min Distance: " << std::fixed << std::setprecision(2) << rec.min_dist << " m" << std::endl;
+            out_file << "Obstacle Pos: (" << std::fixed << std::setprecision(3) << rec.obs_x << ", " << rec.obs_y << ") m" << std::endl;
+            out_file << "Vehicle Pos: (" << std::fixed << std::setprecision(3) << rec.veh_x << ", " << rec.veh_y << ", " << rec.veh_yaw << ") m/rad" << std::endl;
+            out_file << std::endl;
+        }
+
+        // Write minimum summary
+        out_file << "========================================" << std::endl;
+        out_file << "MIN: " << std::fixed << std::setprecision(2) << data.global_min << " m" << std::endl;
+        out_file << "========================================" << std::endl;
+
+        out_file.close();
+        ROS_INFO("[Log] Wrote %s.log with %zu records, MIN=%.2fm",
+                 rule_type.c_str(), data.records.size(), data.global_min);
+    }
+
+    if (rule_logs_.empty()) {
+        ROS_INFO("[Log] No obstacle events recorded during this session.");
+    }
+}
+
+// Ctrl+C signal handler
+void signalHandler(int sig) {
+    ROS_INFO("[ObstacleAvoider] Received shutdown signal, saving log summaries...");
+    if (g_avoider_instance != nullptr) {
+        g_avoider_instance->finalizeLogging();
+    }
+    ros::shutdown();
+}
 
 int main(int argc, char** argv)
 {

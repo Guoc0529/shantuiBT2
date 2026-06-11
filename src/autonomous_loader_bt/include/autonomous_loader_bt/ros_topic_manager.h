@@ -7,9 +7,11 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <functional>
 #include <cstdint>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 #include <actionlib/client/simple_action_client.h>
 #include <autonomous_loader_msgs/NavigateAction.h>
-#include <cmath>
 #include "autonomous_loader_msgs/spadingPose.h"
 
 namespace autonomous_loader_bt
@@ -27,14 +29,13 @@ class ROSTopicManager
 public:
     using NavigateClient = actionlib::SimpleActionClient<autonomous_loader_msgs::NavigateAction>;
 
-    // Helper to print human-readable navigation status labels
     static const char* statusToLabel(NavigationStatus s)
     {
         switch (s)
         {
-            case NavigationStatus::SCOOP: return "铲料";
-            case NavigationStatus::DUMP:  return "卸料";
-            default:                      return "其他";
+            case NavigationStatus::SCOOP: return "Scoop";
+            case NavigationStatus::DUMP:  return "Dump";
+            default:                      return "Other";
         }
     }
 
@@ -43,28 +44,23 @@ public:
         static ROSTopicManager instance;
         return instance;
     }
-    
+
     void initialize(ros::NodeHandle& nh)
     {
         nh_ = nh;
-        
-        // Service client for scoop point
+
         spading_pose_client_ = nh.serviceClient<autonomous_loader_msgs::spadingPose>("/spadingPose");
-        
-        // Publisher for the current navigation goal
-        goal_publisher_ = nh.advertise<geometry_msgs::PoseStamped>("/bt_navigation/current_goal", 1, true); // Latching publisher
-        
-        // Publisher for action status messages
+
+        goal_publisher_ = nh.advertise<geometry_msgs::PoseStamped>("/bt_navigation/current_goal", 1, true);
         action_status_pub_ = nh.advertise<std_msgs::String>("/bt_action/status", 10, true);
-        
-        // Action client for custom navigation
+
         std::string action_name;
         nh_.param<std::string>("navigate_action_name", action_name, std::string("/navigate"));
         nav_client_.reset(new NavigateClient(action_name, true));
         ROS_INFO("Waiting for %s action server...", action_name.c_str());
         nav_client_->waitForServer();
         ROS_INFO("%s action server connected.", action_name.c_str());
-        
+
         ROS_INFO("ROS Topic Manager initialized.");
     }
 
@@ -73,24 +69,30 @@ public:
         std_msgs::String msg;
         msg.data = message;
         action_status_pub_.publish(msg);
-        ROS_INFO_STREAM("[BT_ACTION] " << message);
+        ROS_INFO_STREAM("\033[32m[BT_ACTION]\033[0m " << message);
     }
 
-    // Callbacks for wiring feedback to GlobalState
     void setDistanceUpdateCallback(const std::function<void(double)>& cb) { on_distance_update_ = cb; }
     void setArrivalCallback(const std::function<void(bool)>& cb) { on_arrival_ = cb; }
     void setResultCallback(const std::function<void(const autonomous_loader_msgs::NavigateResult&)>& cb) { on_result_ = cb; }
     void setPlanningFeedbackCallback(const std::function<void(bool)>& cb) { on_planning_feedback_ = cb; }
-    // Pose updates not required in distance-reduction mode; keeping API for compatibility
+    void setNavCancelConfirmedCallback(const std::function<void()>& cb) { on_nav_cancel_confirmed_ = cb; }
+    void setNavCancelRequestedCallback(const std::function<void()>& cb) { on_nav_cancel_requested_ = cb; }
     void setPoseUpdateCallback(const std::function<void(const geometry_msgs::PoseStamped&)>& cb) { on_pose_update_ = cb; }
-    
-    // Navigation APIs (using custom Navigate.action)
-    void sendMoveBaseGoal(const geometry_msgs::PoseStamped& goal,
-                          NavigationStatus status, uint8_t current_id, uint8_t last_id)
-    {
-        // Publish the goal to the dedicated topic
-        goal_publisher_.publish(goal);
 
+    // Send a navigation goal — returns immediately (non-blocking).
+    // Done callback fires via AsyncSpinner in main thread; no fork needed.
+    void sendMoveBaseGoal(const geometry_msgs::PoseStamped& goal,
+        NavigationStatus status, uint8_t current_id, uint8_t last_id)
+    {
+        if (!nav_client_) {
+            throw std::runtime_error("nav_client_ is null!");
+        }
+        if (!nav_client_->isServerConnected()) {
+            throw std::runtime_error("Navigation Action Server is disconnected!");
+        }
+
+        goal_publisher_.publish(goal);
         last_goal_ = goal;
 
         autonomous_loader_msgs::NavigateGoal nav_goal;
@@ -103,67 +105,87 @@ public:
                  goal.pose.position.x, goal.pose.position.y,
                  static_cast<int>(nav_goal.last_status),
                  static_cast<int>(nav_goal.current_status));
-        // last_status_ will be updated in doneCb when navigation succeeds
-        // last_status_ = status;
-        
+
         if (on_arrival_) on_arrival_(false);
-        
+
+        // Cancel any previous goals first
+        try {
+            nav_client_->cancelAllGoals();
+        } catch (const std::exception& e) {
+            ROS_WARN("[NAV] cancelAllGoals threw: %s", e.what());
+        }
+
+        // All actionlib callbacks fire via AsyncSpinner in main thread — safe to call directly
         nav_client_->sendGoal(
             nav_goal,
-            // doneCb
+            // doneCb — fires via AsyncSpinner in main thread
             [this, status](const actionlib::SimpleClientGoalState& state,
-                   const autonomous_loader_msgs::NavigateResultConstPtr& res)
+                           const autonomous_loader_msgs::NavigateResultConstPtr& res)
             {
+                bool was_preempted = (state == actionlib::SimpleClientGoalState::PREEMPTED);
+                ROS_INFO("[NAV] doneCb: state=%s, preempted=%d, has_result=%d",
+                         state.toString().c_str(), was_preempted, !!res);
+
+                if (was_preempted) {
+                    notifyNavCancelConfirmed();
+                }
+
+                autonomous_loader_msgs::NavigateResult result;
+                result.success = false;
+
                 if (res) {
-                    if (on_result_) on_result_(*res);
-                    // The action is done, so we have "arrived" at a result.
-                    // The quality of that result is checked by the BT itself.
-                    if (on_arrival_) on_arrival_(true);
-                    // Update last_status_ only if navigation succeeded
-                    if(state == actionlib::SimpleClientGoalState::SUCCEEDED && res->success)
-                    {
-                        last_status_ = status;
-                    }
-                } else {
-                    // 如果结果为空，说明Action失败，创建一个默认的失败结果
-                    autonomous_loader_msgs::NavigateResult default_res;
-                    default_res.success = false;
-                    if (on_result_) on_result_(default_res);
-                    // The action is done, so we have "arrived" at a result.
-                    if (on_arrival_) on_arrival_(true);
+                    result = *res;
+                }
+
+                if (on_result_) on_result_(result);
+                if (on_arrival_) on_arrival_(true);
+
+                if (state == actionlib::SimpleClientGoalState::SUCCEEDED && result.success) {
+                    last_status_ = status;
+                    ROS_INFO("[NAV] Nav goal succeeded, last_status updated to %d",
+                             static_cast<int>(status));
                 }
             },
             // activeCb
             NavigateClient::SimpleActiveCallback(),
-            // feedbackCb
+            // feedbackCb — fires via AsyncSpinner in main thread
             [this](const autonomous_loader_msgs::NavigateFeedbackConstPtr& fb)
             {
                 if (!fb) return;
-                // Always update distance
                 if (on_distance_update_) on_distance_update_(fb->distance_to_goal);
-
-                // Additionally, check for the planning feedback. 
-                // The action server should send this immediately after planning.
                 if (on_planning_feedback_) {
                     on_planning_feedback_(fb->plan_succeeded);
                 }
             }
         );
+
+        ROS_INFO("[NAV] sendMoveBaseGoal returned (callbacks via AsyncSpinner)");
     }
+
+    bool isNavChildAlive() const { return false; }  // No child process
 
     void cancelMoveBaseGoal()
     {
         if (nav_client_ && nav_client_->isServerConnected()) {
+            nav_cancel_confirmed_ = false;
             nav_client_->cancelAllGoals();
+            if (on_nav_cancel_requested_) on_nav_cancel_requested_();
         }
     }
-    
-    // Service call for scoop point
+
+    void notifyNavCancelConfirmed()
+    {
+        nav_cancel_confirmed_ = true;
+        if (on_nav_cancel_confirmed_) on_nav_cancel_confirmed_();
+    }
+    bool isNavCancelConfirmed() const { return nav_cancel_confirmed_; }
+    void resetNavCancelConfirmed() { nav_cancel_confirmed_ = false; }
+
     bool requestScoopPoint(uint8_t pileID, geometry_msgs::PoseStamped& result)
     {
         autonomous_loader_msgs::spadingPose srv;
         srv.request.pileID = pileID;
-        
+
         if (spading_pose_client_.call(srv))
         {
             result.header.frame_id = "map";
@@ -174,30 +196,85 @@ public:
         return false;
     }
 
-    void setLastStatus(NavigationStatus status)
+    void setLastStatus(NavigationStatus status) { last_status_ = status; }
+
+    // ===== 避障相关：鸣笛和双闪 =====
+    void initializeObstacleControls(ros::NodeHandle& nh)
     {
-        last_status_ = status;
+        horn_pub_ = nh.advertise<std_msgs::Bool>("/ACU_Honr", 1, true);
+        turn_left_pub_ = nh.advertise<std_msgs::Bool>("/ACU_TurnLeftLgt", 1, true);
+        turn_right_pub_ = nh.advertise<std_msgs::Bool>("/ACU_TurnRightLgt", 1, true);
+        ROS_INFO("Obstacle control publishers initialized (Horn, Hazard lights)");
+    }
+
+    void hornOn()
+    {
+        std_msgs::Bool msg;
+        msg.data = true;
+        horn_pub_.publish(msg);
+        ROS_INFO("[OBSTACLE] Horn ON");
+    }
+
+    void hornOff()
+    {
+        std_msgs::Bool msg;
+        msg.data = false;
+        horn_pub_.publish(msg);
+        ROS_INFO("[OBSTACLE] Horn OFF");
+    }
+
+    void hazardLightsOn()
+    {
+        std_msgs::Bool on_msg;
+        on_msg.data = true;
+        turn_left_pub_.publish(on_msg);
+        turn_right_pub_.publish(on_msg);
+        ROS_INFO("[OBSTACLE] Hazard lights ON (left+right blinkers)");
+    }
+
+    void hazardLightsOff()
+    {
+        std_msgs::Bool off_msg;
+        off_msg.data = false;
+        turn_left_pub_.publish(off_msg);
+        turn_right_pub_.publish(off_msg);
+        ROS_INFO("[OBSTACLE] Hazard lights OFF");
+    }
+
+    void sendObstacleNavigationGoal(const geometry_msgs::PoseStamped& goal)
+    {
+        goal_publisher_.publish(goal);
+        last_goal_ = goal;
+        ROS_INFO("[OBSTACLE] Sending obstacle navigation goal (%.2f, %.2f)",
+                 goal.pose.position.x, goal.pose.position.y);
     }
 
 private:
-    ROSTopicManager() = default;
+    ROSTopicManager()
+        : last_status_(NavigationStatus::OTHER), nav_cancel_confirmed_(false) {}
 
     ros::NodeHandle nh_;
     ros::ServiceClient spading_pose_client_;
-    ros::Publisher goal_publisher_; // Publisher for the current navigation goal
-    ros::Publisher action_status_pub_; // Publisher for action status messages
+    ros::Publisher goal_publisher_;
+    ros::Publisher action_status_pub_;
+    ros::Publisher horn_pub_;
+    ros::Publisher turn_left_pub_;
+    ros::Publisher turn_right_pub_;
     std::unique_ptr<NavigateClient> nav_client_;
     geometry_msgs::PoseStamped last_goal_;
 
     std::function<void(double)> on_distance_update_;
     std::function<void(bool)> on_arrival_;
     std::function<void(const autonomous_loader_msgs::NavigateResult&)> on_result_;
-    std::function<void(const geometry_msgs::PoseStamped&)> on_pose_update_;
     std::function<void(bool)> on_planning_feedback_;
+    std::function<void()> on_nav_cancel_confirmed_;
+    std::function<void()> on_nav_cancel_requested_;
+    std::function<void(const geometry_msgs::PoseStamped&)> on_pose_update_;
 
-    NavigationStatus last_status_ = NavigationStatus::OTHER;
+    NavigationStatus last_status_;
+    bool nav_cancel_confirmed_;
 };
 
-} // namespace autonomous_loader_bt
+}  // namespace autonomous_loader_bt
 
-#endif // ROS_TOPIC_MANAGER_H
+#endif  // ROS_TOPIC_MANAGER_H
