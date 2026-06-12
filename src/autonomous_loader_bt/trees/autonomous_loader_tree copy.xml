@@ -602,29 +602,11 @@
                                   ==============================================================
                                   SEQ_AFTER_CYCLE_DONE: 循环完成处理
                                   ==============================================================
-                                  重置状态准备下一循环，并检查是否有待执行的避障
+                                  重置状态准备下一循环
                                 -->
                                 <Sequence name="SEQ_AFTER_CYCLE_DONE">
                                     <SetWorkState value="1"/>
                                     <Script code="just_left_hopper:=true"/>
-
-                                    <!-- 检查是否有 ctrlCmd=3 触发的待执行避障 -->
-                                    <Fallback name="FALLBACK_CHECK_OBSTACLE_PENDING">
-                                        <!-- 待执行避障：完成当前任务后去避障点 -->
-                                        <Sequence name="SEQ_OBSTACLE_AFTER_TASK">
-                                            <CheckObstaclePending/>
-                                            <HornAndHazard/>
-                                            <SetObstacleTarget/>
-                                            <!-- 将 obstacle_pending 转为 obstacle_triggered 表示正在执行 -->
-                                            <ActivateObstaclePending/>
-                                            <NavigateToObstacle/>
-                                            <WaitForRestore/>
-                                            <HazardLightsOff/>
-                                            <ClearRestoreRequested/>
-                                        </Sequence>
-                                        <!-- 无待执行避障，正常继续 -->
-                                        <AlwaysSuccess/>
-                                    </Fallback>
                                 </Sequence>
 
                             </Sequence>

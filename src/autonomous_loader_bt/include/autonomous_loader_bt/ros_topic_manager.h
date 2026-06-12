@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/UInt8.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <functional>
 #include <cstdint>
@@ -201,44 +202,49 @@ public:
     // ===== 避障相关：鸣笛和双闪 =====
     void initializeObstacleControls(ros::NodeHandle& nh)
     {
-        horn_pub_ = nh.advertise<std_msgs::Bool>("/ACU_Honr", 1, true);
-        turn_left_pub_ = nh.advertise<std_msgs::Bool>("/ACU_TurnLeftLgt", 1, true);
-        turn_right_pub_ = nh.advertise<std_msgs::Bool>("/ACU_TurnRightLgt", 1, true);
+        horn_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_Honr", 1, true);
+        turn_left_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_TurnLeftLgt", 1, true);
+        turn_right_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_TurnRightLgt", 1, true);
         ROS_INFO("Obstacle control publishers initialized (Horn, Hazard lights)");
     }
 
     void hornOn()
     {
-        std_msgs::Bool msg;
-        msg.data = true;
+        std_msgs::UInt8 msg;
+        msg.data = 1;
         horn_pub_.publish(msg);
         ROS_INFO("[OBSTACLE] Horn ON");
     }
 
     void hornOff()
     {
-        std_msgs::Bool msg;
-        msg.data = false;
+        std_msgs::UInt8 msg;
+        msg.data = 0;
         horn_pub_.publish(msg);
         ROS_INFO("[OBSTACLE] Horn OFF");
     }
 
     void hazardLightsOn()
     {
-        std_msgs::Bool on_msg;
-        on_msg.data = true;
-        turn_left_pub_.publish(on_msg);
-        turn_right_pub_.publish(on_msg);
+        std_msgs::UInt8 msg;
+        msg.data = 1;
+        turn_left_pub_.publish(msg);
+        turn_right_pub_.publish(msg);
         ROS_INFO("[OBSTACLE] Hazard lights ON (left+right blinkers)");
     }
 
     void hazardLightsOff()
     {
-        std_msgs::Bool off_msg;
-        off_msg.data = false;
-        turn_left_pub_.publish(off_msg);
-        turn_right_pub_.publish(off_msg);
+        std_msgs::UInt8 msg;
+        msg.data = 0;
+        turn_left_pub_.publish(msg);
+        turn_right_pub_.publish(msg);
         ROS_INFO("[OBSTACLE] Hazard lights OFF");
+    }
+
+    void publishHazardLights(bool on)
+    {
+        on ? hazardLightsOn() : hazardLightsOff();
     }
 
     void sendObstacleNavigationGoal(const geometry_msgs::PoseStamped& goal)

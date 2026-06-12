@@ -159,6 +159,12 @@ public:
     bool isRestoreRequested() const;
     void setObstacleTriggered(bool triggered);
     bool isObstacleTriggered() const;
+    // obstacle_pending: 收到 ctrlCmd=3 后标记，等待当前任务完成
+    void setObstaclePending(bool pending);
+    bool isObstaclePending() const;
+    // obstacle_from_ctrl3: 标记是否来自 ctrlCmd=3 触发的避障
+    void setObstacleFromCtrl3(bool from_ctrl3);
+    bool isObstacleFromCtrl3() const;
 
 private:
     GlobalState() = default;
@@ -209,6 +215,8 @@ private:
     geometry_msgs::PoseStamped obstacle_target_;
     bool restore_requested_ = false;
     bool obstacle_triggered_ = false;
+    bool obstacle_pending_ = false;  // 收到 ctrlCmd=3，等待任务完成后执行避障
+    bool obstacle_from_ctrl3_ = false;  // 标记是否来自 ctrlCmd=3
 
     // Current task ID for status reporting
     std::atomic<int> current_task_id_{-1};
@@ -244,7 +252,7 @@ public:
         status_pub_ = nh.advertise<std_msgs::Int32MultiArray>("/vehicle/task_status", 10, true);
         timer_ = nh.createTimer(ros::Duration(1.0), &TaskStatusReporter::timerCallback, this);
         initialized_ = true;
-
+        setState(TaskStatusReporter::IDLE);
         ROS_INFO("[TaskStatusReporter] Initialized, publishing to /vehicle/task_status");
     }
 
@@ -510,6 +518,15 @@ public:
     BT::NodeStatus tick() override;
 };
 
+// 检查是否有待执行的避障任务（ctrlCmd=3 触发，等待任务完成后执行）
+class CheckObstaclePending : public BT::ConditionNode
+{
+public:
+    CheckObstaclePending(const std::string& name, const BT::NodeConfiguration& config) : BT::ConditionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
 class HornAndHazard : public BT::SyncActionNode
 {
 public:
@@ -530,6 +547,15 @@ class SetObstacleTarget : public BT::SyncActionNode
 {
 public:
     SetObstacleTarget(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+// 将 obstacle_pending 转换为 obstacle_triggered（表示正在执行避障）
+class ActivateObstaclePending : public BT::SyncActionNode
+{
+public:
+    ActivateObstaclePending(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
     static BT::PortsList providedPorts() { return {}; }
     BT::NodeStatus tick() override;
 };

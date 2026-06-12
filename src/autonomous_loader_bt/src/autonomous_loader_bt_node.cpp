@@ -424,7 +424,7 @@ private:
                 ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=2: Remote takeover - halt BT, set state=6");
                 break;
 
-            case 3:  // 避障停车（带坐标）
+            case 3:  // 避障停车（带坐标）- 先完成当前任务，再去避障点
                 {
                     geometry_msgs::PoseStamped obstacle_target;
                     obstacle_target.header.stamp = ros::Time::now();
@@ -440,13 +440,14 @@ private:
                     obstacle_target.pose.orientation.y = 0;
                     obstacle_target.pose.orientation.z = sy;
 
+                    // 保存避障目标，不立即触发，等待当前任务完成
                     gs.setObstacleTarget(obstacle_target);
                     gs.setObstacleType(0);  // 0表示从TaskCtrl来的坐标
-                    gs.setObstacleTriggered(true);
-                    gs.setPauseTask(true);
-                    gs.setHaltRequested(true);
+                    gs.setObstaclePending(true);  // 标记为待执行避障
+                    gs.setObstacleFromCtrl3(true);  // 标记来源为 ctrlCmd=3
+                    // 立即设置工作状态为5（人工干预）
                     TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
-                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=3: Obstacle stop with target (%.2f, %.2f, yaw=%.2f), state=5",
+                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=3: Obstacle pending, target (%.2f, %.2f, yaw=%.2f), state=5. Will avoid after current task completes",
                              msg->target_x, msg->target_y, msg->target_yaw);
                 }
                 break;
@@ -459,15 +460,34 @@ private:
                 ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=4: Emergency stop - halt BT, set state=4");
                 break;
 
-            case 5:  // 继续任务
-                gs.setPauseTask(false);
-                gs.setEmergencyStop(false);
-                gs.clearHaltRequested();
-                gs.setRestoreRequested(true);
-                gs.setObstacleTriggered(false);
-                gs.setObstacleType(0);
-                TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
-                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume task - clear flags, restore obstacle state, set state=1");
+            case 5:  // 继续任务 - 根据来源执行不同恢复动作
+                {
+                    bool from_ctrl3 = gs.isObstacleFromCtrl3();
+                    gs.setObstacleFromCtrl3(false);  // 清除来源标记
+
+                    if (from_ctrl3) {
+                        // ctrlCmd=3 触发的避障：只需清除标志、关闭双闪、状态=1
+                        gs.setObstacleTriggered(false);
+                        gs.setObstaclePending(false);
+                        gs.setObstacleType(0);
+                        gs.setRestoreRequested(false);  // 不需要等待恢复，直接清除
+                        // 关闭双闪
+                        ROSTopicManager::getInstance().publishHazardLights(false);
+                        TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+                        ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume from ctrlCmd=3 obstacle - clear flags, hazard off, state=1");
+                    } else {
+                        // 其他来源（ctrlCmd=2/4）触发的避障：完整恢复流程
+                        gs.setPauseTask(false);
+                        gs.setEmergencyStop(false);
+                        gs.clearHaltRequested();
+                        gs.setRestoreRequested(true);  // 触发 WaitForRestore
+                        gs.setObstacleTriggered(false);
+                        gs.setObstaclePending(false);
+                        gs.setObstacleType(0);
+                        TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+                        ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume task - clear flags, restore obstacle state, set state=1");
+                    }
+                }
                 break;
 
             case 6:  // 结束任务

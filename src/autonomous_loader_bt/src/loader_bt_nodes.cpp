@@ -670,6 +670,30 @@ bool GlobalState::isObstacleTriggered() const
     return obstacle_triggered_;
 }
 
+void GlobalState::setObstaclePending(bool pending)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    obstacle_pending_ = pending;
+}
+
+bool GlobalState::isObstaclePending() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return obstacle_pending_;
+}
+
+void GlobalState::setObstacleFromCtrl3(bool from_ctrl3)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    obstacle_from_ctrl3_ = from_ctrl3;
+}
+
+bool GlobalState::isObstacleFromCtrl3() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return obstacle_from_ctrl3_;
+}
+
 
 // ========== 条件节点实现 ==========
 
@@ -941,6 +965,13 @@ BT::NodeStatus CheckRestoreRequested::tick()
     return requested ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
+BT::NodeStatus CheckObstaclePending::tick()
+{
+    bool pending = GlobalState::getInstance().isObstaclePending();
+    ROS_INFO_THROTTLE(5.0, "[BT] CheckObstaclePending: %s", pending ? "YES" : "NO");
+    return pending ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
 BT::NodeStatus HornAndHazard::tick()
 {
     const int duration_ms = 2000;  // 固定2秒
@@ -998,6 +1029,18 @@ BT::NodeStatus SetObstacleTarget::tick()
 
     // 保存目标供NavigateToObstacle使用
     gs.setObstacleTarget(target);
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus ActivateObstaclePending::tick()
+{
+    auto& gs = GlobalState::getInstance();
+    // 将 obstacle_pending 转换为 obstacle_triggered，表示正在执行避障
+    if (gs.isObstaclePending()) {
+        gs.setObstacleTriggered(true);
+        gs.setObstaclePending(false);  // 清除待执行标记
+        ROS_INFO("[BT] ActivateObstaclePending: Activated obstacle avoidance, pending->triggered");
+    }
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1909,9 +1952,11 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     // 避障相关
     factory.registerNodeType<CheckObstacleTriggered>("CheckObstacleTriggered");
     factory.registerNodeType<CheckRestoreRequested>("CheckRestoreRequested");
+    factory.registerNodeType<CheckObstaclePending>("CheckObstaclePending");
     factory.registerNodeType<HornAndHazard>("HornAndHazard");
     factory.registerNodeType<HazardLightsOff>("HazardLightsOff");
     factory.registerNodeType<SetObstacleTarget>("SetObstacleTarget");
+    factory.registerNodeType<ActivateObstaclePending>("ActivateObstaclePending");
     factory.registerNodeType<NavigateToObstacle>("NavigateToObstacle");
     factory.registerNodeType<WaitForRestore>("WaitForRestore");
     factory.registerNodeType<ClearRestoreRequested>("ClearRestoreRequested");
