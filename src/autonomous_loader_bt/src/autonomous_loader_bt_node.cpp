@@ -51,10 +51,10 @@ public:
         nh_.param<bool>("enable_groot2", enable_groot2, false);
         nh_.param<int>("groot2_port", groot2_port, 1666);
 
-        ROS_INFO("Starting autonomous loader robot behavior tree node");
-        ROS_INFO("Tree file: %s", tree_file.c_str());
-        ROS_INFO("Config file: %s", config_file.c_str());
-        ROS_INFO("Loop rate: %.1f Hz", loop_rate);
+        ROS_INFO("\033[36m[BT]\033[0m Starting autonomous loader robot behavior tree node");
+        ROS_INFO("\033[36m[BT]\033[0m Tree file: %s", tree_file.c_str());
+        ROS_INFO("\033[36m[BT]\033[0m Config file: %s", config_file.c_str());
+        ROS_INFO("\033[36m[BT]\033[0m Loop rate: %.1f Hz", loop_rate);
 
         // 加载配置文件
         loadConfigFile(config_file);
@@ -104,7 +104,7 @@ public:
             // 注册通用人工接管子树（必须在创建主树之前）
             std::string subtree_path = getPackagePath() + "/trees/manual_override_subtree.xml";
             factory.registerBehaviorTreeFromFile(subtree_path);
-            ROS_INFO("Registered manual override subtree from: %s", subtree_path.c_str());
+            ROS_INFO("\033[36m[BT]\033[0m Registered manual override subtree from: %s", subtree_path.c_str());
             
             // 注册主行为树（包含 SubTree 引用）
             factory.registerBehaviorTreeFromFile(tree_path);
@@ -112,7 +112,7 @@ public:
             // 使用 createTree 而非 createTreeFromFile（避免警告）
             std::string main_tree_name = "AutonomousLoaderTree";
             tree_ = factory.createTree(main_tree_name);
-            ROS_INFO("Successfully loaded behavior tree: %s", main_tree_name.c_str());
+            ROS_INFO("\033[36m[BT]\033[0m Successfully loaded behavior tree: %s", main_tree_name.c_str());
 
             // 设置日志记录器
             if (enable_logging) {
@@ -128,10 +128,10 @@ public:
             timer_ = nh_.createTimer(ros::Duration(1.0 / loop_rate),
                                    &AutonomousLoaderBTNode::executeTree, this);
 
-            ROS_INFO("Waiting for tasks from scheduler (service /liaodou or topic /scheduler/start_task)");
+            ROS_INFO("\033[36m[BT]\033[0m Waiting for tasks from scheduler (service /liaodou or topic /scheduler/start_task)");
 
         } catch (const std::exception& e) {
-            ROS_ERROR("Failed to create behavior tree: %s", e.what());
+            ROS_ERROR("\033[31m[BT]\033[0m Failed to create behavior tree: %s", e.what());
             ros::shutdown();
         }
     }
@@ -143,7 +143,7 @@ private:
 
         std::string param_path;
         if (nh_.getParam("package_root", param_path) && exists(param_path)) {
-            ROS_INFO("[PATH] Using param(~package_root): %s", param_path.c_str());
+            ROS_INFO("\033[36m[PATH]\033[0m Using param(~package_root): %s", param_path.c_str());
             return param_path;
         }
 
@@ -154,7 +154,7 @@ private:
 
         std::string rospack_path = ros::package::getPath("autonomous_loader_bt");
         if (exists(rospack_path)) {
-            ROS_INFO("[PATH] Using ros::package::getPath(): %s", rospack_path.c_str());
+            ROS_INFO("\033[36m[PATH]\033[0m Using ros::package::getPath(): %s", rospack_path.c_str());
             return rospack_path;
         }
 
@@ -166,11 +166,11 @@ private:
             for (int i = 0; i < 8 && !dir.empty(); ++i) {
                 std::string candidate = dir;
                 if (exists(candidate + "/src/autonomous_loader_bt")) {
-                    ROS_INFO("[PATH] Fallback to discovered src path: %s", (candidate + "/src/autonomous_loader_bt").c_str());
+                    ROS_INFO("\033[36m[PATH]\033[0m Fallback to discovered src path: %s", (candidate + "/src/autonomous_loader_bt").c_str());
                     return candidate + "/src/autonomous_loader_bt";
                 }
                 if (exists(candidate + "/trees") && exists(candidate + "/config")) {
-                    ROS_INFO("[PATH] Fallback to discovered package-like path: %s", candidate.c_str());
+                    ROS_INFO("\033[36m[PATH]\033[0m Fallback to discovered package-like path: %s", candidate.c_str());
                     return candidate;
                 }
                 auto pos = dir.find_last_of('/');
@@ -183,14 +183,14 @@ private:
         if (getcwd(cwd, sizeof(cwd))) {
             std::string guess = std::string(cwd) + "/src/autonomous_loader_bt";
             if (exists(guess)) {
-                ROS_INFO("[PATH] Fallback to CWD/src path: %s", guess.c_str());
+                ROS_INFO("\033[36m[PATH]\033[0m Fallback to CWD/src path: %s", guess.c_str());
                 return guess;
             }
-            ROS_INFO("[PATH] Fallback to CWD: %s", cwd);
+            ROS_INFO("\033[36m[PATH]\033[0m Fallback to CWD: %s", cwd);
             return std::string(cwd);
         }
 
-        ROS_ERROR("[PATH] Unable to resolve package path; using '.'");
+        ROS_ERROR("\033[31m[PATH]\033[0m Unable to resolve package path; using '.'");
         return std::string(".");
     }
     
@@ -200,7 +200,7 @@ private:
         
         auto& config_manager = autonomous_loader_bt::ConfigManager::getInstance();
         if (!config_manager.loadConfig(config_path)) {
-            ROS_WARN("Config file loading failed, will use default configuration");
+            ROS_WARN("\033[33m[BT]\033[0m Config file loading failed, will use default configuration");
         }
     }
 
@@ -219,14 +219,14 @@ private:
 
         // TaskCtrl 话题订阅 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
         taskctrl_sub_ = nh_.subscribe("/task_ctrl_command", 10, &AutonomousLoaderBTNode::taskCtrlCallback, this);
-        ROS_INFO("Subscribed to /task_ctrl_command for task control commands");
+        ROS_INFO("\033[36m[BT]\033[0m Subscribed to /task_ctrl_command for task control commands");
 
         // 避障相关话题订阅
         obstacle_1_sub_ = nh_.subscribe("/obstacle_1", 10, &AutonomousLoaderBTNode::obstacle1Callback, this);
         obstacle_2_sub_ = nh_.subscribe("/obstacle_2", 10, &AutonomousLoaderBTNode::obstacle2Callback, this);
         backstart_sub_ = nh_.subscribe("/backstart", 10, &AutonomousLoaderBTNode::backstartCallback, this);
         restore_sub_ = nh_.subscribe("/restore", 10, &AutonomousLoaderBTNode::restoreCallback, this);
-        ROS_INFO("Subscribed to obstacle topics (/obstacle_1, /obstacle_2, /backstart, /restore)");
+        ROS_INFO("\033[36m[BT]\033[0m Subscribed to obstacle topics (/obstacle_1, /obstacle_2, /backstart, /restore)");
 
         // 初始化鸣笛和双闪控制
         ROSTopicManager::getInstance().initializeObstacleControls(nh_);
@@ -234,25 +234,25 @@ private:
         // 服务端：接收调度下发任务
         task_service_ = nh_.advertiseService("liaodou", &AutonomousLoaderBTNode::taskServiceCallback, this);
         
-        ROS_INFO("Service /liaodou advertised (private namespace: %s/liaodou)", nh_.getNamespace().c_str());
-        ROS_INFO("Waiting for task requests from scheduler...");
-        ROS_INFO("All ROS topics set up");
+        ROS_INFO("\033[36m[BT]\033[0m Service /liaodou advertised (private namespace: %s/liaodou)", nh_.getNamespace().c_str());
+        ROS_INFO("\033[36m[BT]\033[0m Waiting for task requests from scheduler...");
+        ROS_INFO("\033[36m[BT]\033[0m All ROS topics set up");
     }
 
     void setupLoggers(const std::string& log_file, bool enable_console)
     {
         if (enable_console) {
             console_logger_ = std::make_unique<BT::StdCoutLogger>(tree_);
-            ROS_INFO("Console logging enabled");
+            ROS_INFO("\033[36m[BT]\033[0m Console logging enabled");
         } else {
-            ROS_INFO("Console logging disabled (use enable_console_logging:=true to enable)");
+            ROS_INFO("\033[36m[BT]\033[0m Console logging disabled (use enable_console_logging:=true to enable)");
         }
         
         try {
             file_logger_ = std::make_unique<BT::FileLogger2>(tree_, log_file);
-            ROS_INFO("File logging enabled: %s", log_file.c_str());
+            ROS_INFO("\033[36m[BT]\033[0m File logging enabled: %s", log_file.c_str());
         } catch (const std::exception& e) {
-            ROS_WARN("Failed to create file logger: %s", e.what());
+            ROS_WARN("\033[33m[BT]\033[0m Failed to create file logger: %s", e.what());
         }
     }
     
@@ -260,11 +260,11 @@ private:
     {
         try {
             groot2_publisher_ = std::make_unique<BT::Groot2Publisher>(tree_, port);
-            ROS_INFO("Groot2 monitoring enabled on port %d", port);
-            ROS_INFO("Connect Groot2 to: tcp://localhost:%d", port);
+            ROS_INFO("\033[36m[BT]\033[0m Groot2 monitoring enabled on port %d", port);
+            ROS_INFO("\033[36m[BT]\033[0m Connect Groot2 to: tcp://localhost:%d", port);
         } catch (const std::exception& e) {
-            ROS_WARN("Failed to create Groot2 publisher: %s", e.what());
-            ROS_WARN("Make sure BehaviorTree.CPP was compiled with ZMQ support");
+            ROS_WARN("\033[33m[BT]\033[0m Failed to create Groot2 publisher: %s", e.what());
+            ROS_WARN("\033[33m[BT]\033[0m Make sure BehaviorTree.CPP was compiled with ZMQ support");
         }
     }
 
@@ -280,12 +280,12 @@ private:
                 tree_.haltTree();
                 gs.clearHaltRequested();
                 idle_timer_started_ = false;
-                ROS_INFO("[BT_ROOT] Halt requested - tree halted");
+                ROS_INFO("\033[36m[BT_ROOT]\033[0m Halt requested - tree halted");
             }
 
             BT::NodeStatus status = tree_.tickOnce();
             if (tick_count % 100 == 0) {
-                ROS_INFO_THROTTLE(10.0, "[BT_ROOT] Still running, tick #%d", tick_count);
+                ROS_INFO_THROTTLE(10.0, "\033[36m[BT_ROOT]\033[0m Still running, tick #%d", tick_count);
             }
             publishStatus(status);
 
@@ -296,7 +296,7 @@ private:
                     gs.setIsEnding(false);
                     TaskStatusReporter::instance().setState(TaskStatusReporter::ENDED);
                     idle_timer_started_ = false;
-                    ROS_INFO("[BT_ROOT] Task ended - tree halted, state=8");
+                    ROS_INFO("\033[36m[BT_ROOT]\033[0m Task ended - tree halted, state=8");
                 }
             }
 
@@ -307,7 +307,7 @@ private:
                     idle_start_time_ = ros::Time::now();
                     idle_timer_started_ = true;
                     TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
-                    ROS_INFO("[BT_ROOT] Task completed - state=1 (IDLE), 2s timer started");
+                    ROS_INFO("\033[36m[BT_ROOT]\033[0m Task completed - state=1 (IDLE), 2s timer started");
                 }
 
                 // After 2 seconds, if new task exists, set state=2/3; otherwise keep state=1
@@ -327,7 +327,7 @@ private:
             }
 
         } catch (const std::exception& e) {
-            ROS_ERROR("Error executing behavior tree: %s", e.what());
+            ROS_ERROR("\033[31m[BT]\033[0m Error executing behavior tree: %s", e.what());
         }
     }
 
@@ -360,7 +360,7 @@ private:
 
         if (msg->task_id == 0)
         {
-            ROS_WARN("Received task cancellation request (task_id=0) via topic. Sending vehicle to park.");
+            ROS_WARN("\033[33m[BT]\033[0m Received task cancellation request (task_id=0) via topic. Sending vehicle to park.");
             auto& config = autonomous_loader_bt::ConfigManager::getInstance();
             geometry_msgs::PoseStamped parking_goal = config.getParkingPose("main_parking");
 
@@ -374,14 +374,14 @@ private:
             gs.clearTasks();
             gs.setTaskId(-1);
             autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(-1);
-            ROS_INFO("Sent new navigation goal to parking spot and halted BT (topic).");
+            ROS_INFO("\033[36m[BT]\033[0m Sent new navigation goal to parking spot and halted BT (topic).");
             return;
         }
 
-        ROS_INFO("Received start task command - Task ID: %d, Bin: %d, Hopper: %d", msg->task_id, msg->bin_id, msg->hopper_id);
+        ROS_INFO("\033[36m[BT]\033[0m Received start task command - Task ID: %d, Bin: %d, Hopper: %d", msg->task_id, msg->bin_id, msg->hopper_id);
         int task_type = (msg->task_type == "auto" || msg->task_type == "scoop") ? 0 : 1;
         int work_state = (task_type == 0) ? 2 : 3;  // 2=auto, 3=temp
-        ROS_INFO("[DEBUG] task_type=%d, setting work_state=%d", task_type, work_state);
+        ROS_INFO("\033[36m[BT]\033[0m DEBUG: task_type=%d, setting work_state=%d", task_type, work_state);
         autonomous_loader_bt::GlobalState::getInstance().setWorkState(work_state);
         autonomous_loader_bt::Task task(msg->task_id, msg->bin_id, msg->hopper_id, task_type, msg->task_type);
         autonomous_loader_bt::GlobalState::getInstance().addTask(task);
@@ -389,19 +389,19 @@ private:
         autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(msg->task_id);
 
         nh_.setParam("ArmBucketState", 2);
-        ROS_INFO("Set param ArmBucketState=2 (prepare raise arm)");
+        ROS_INFO("\033[36m[BT]\033[0m Set param ArmBucketState=2 (prepare raise arm)");
     }
 
     void pauseTaskCallback(const std_msgs::Bool::ConstPtr& msg)
     {
         autonomous_loader_bt::GlobalState::getInstance().setPauseTask(msg->data);
-        ROS_INFO("Received pause task command: %s", msg->data ? "yes" : "no");
+        ROS_INFO("\033[36m[BT]\033[0m Received pause task command: %s", msg->data ? "yes" : "no");
     }
 
     void endTaskCallback(const std_msgs::Bool::ConstPtr& msg)
     {
         autonomous_loader_bt::GlobalState::getInstance().setEndTask(msg->data);
-        ROS_INFO("Received end task command: %s", msg->data ? "yes" : "no");
+        ROS_INFO("\033[36m[BT]\033[0m Received end task command: %s", msg->data ? "yes" : "no");
     }
 
     void taskCtrlCallback(const shuju::TaskCtrl::ConstPtr& msg)
@@ -504,14 +504,17 @@ private:
     }
 
     // ===== 避障相关回调函数 =====
+    // obstacle_1/obstacle_2: 设置 obstacle_pending=true，等待任务完成后执行避障
     void obstacle1Callback(const std_msgs::Bool::ConstPtr& msg)
     {
         if (msg->data) {
             auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-            if (!gs.isObstacleTriggered()) {
-                gs.setObstacleTriggered(true);
-                gs.setObstacleType(1);  // obstacle_1
-                ROS_INFO("[Obstacle] /obstacle_1 triggered, obstacle_type=1");
+            if (!gs.isObstaclePending()) {
+                gs.setObstaclePending(true);     // 改为待执行模式
+                gs.setObstacleFromCtrl3(false);  // 标记来源不是ctrlCmd=3
+                gs.setObstacleType(1);           // obstacle_1
+                TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
+                ROS_INFO("\033[36m[Obstacle]\033[0m /obstacle_1 triggered, obstacle_pending=true, obstacle_type=1, state=5");
             }
         }
     }
@@ -520,10 +523,12 @@ private:
     {
         if (msg->data) {
             auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-            if (!gs.isObstacleTriggered()) {
-                gs.setObstacleTriggered(true);
-                gs.setObstacleType(2);  // obstacle_2
-                ROS_INFO("[Obstacle] /obstacle_2 triggered, obstacle_type=2");
+            if (!gs.isObstaclePending()) {
+                gs.setObstaclePending(true);     // 改为待执行模式
+                gs.setObstacleFromCtrl3(false);  // 标记来源不是ctrlCmd=3
+                gs.setObstacleType(2);           // obstacle_2
+                TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
+                ROS_INFO("\033[36m[Obstacle]\033[0m /obstacle_2 triggered, obstacle_pending=true, obstacle_type=2, state=5");
             }
         }
     }
@@ -535,7 +540,7 @@ private:
             if (!gs.isObstacleTriggered()) {
                 gs.setObstacleTriggered(true);
                 gs.setObstacleType(3);  // backstart
-                ROS_INFO("[Obstacle] /backstart triggered, obstacle_type=3");
+                ROS_INFO("\033[36m[Obstacle]\033[0m /backstart triggered, obstacle_type=3");
             }
         }
     }
@@ -544,9 +549,20 @@ private:
     {
         if (msg->data) {
             auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-            gs.setRestoreRequested(true);
-            gs.setObstacleTriggered(false);
-            ROS_INFO("[Obstacle] /restore triggered, restore requested");
+            
+            // /restore 只处理 obstacle_1/obstacle_2 来源的恢复
+            // ctrlCmd=3 来源的恢复由 ctrlCmd=5 处理
+            if (gs.isObstaclePending() && !gs.isObstacleFromCtrl3()) {
+                gs.setObstacleTriggered(false);
+                gs.setObstaclePending(false);
+                gs.setObstacleType(0);
+                gs.setRestoreRequested(false);
+                ROSTopicManager::getInstance().publishHazardLights(false);
+                TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
+                ROS_INFO("\033[36m[Obstacle]\033[0m /restore: Resume from obstacle_1/2, hazard off, state=1");
+            } else {
+                ROS_WARN("\033[33m[Obstacle]\033[0m /restore: Ignored (no pending obstacle or ctrlCmd=3 source)");
+            }
         }
     }
 
@@ -580,13 +596,13 @@ private:
             gs.setTaskId(-1);
             autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(-1);
 
-            ROS_INFO("Sent new navigation goal to parking spot and halted BT.");
+            ROS_INFO("\033[36m[BT]\033[0m Sent new navigation goal to parking spot and halted BT.");
             res.huiying = true;
             return true;
         }
 
-        ROS_INFO("Received service task: taskID=%d, type=%d, bin=%d, hopper=%d", req.taskID, req.type, req.cang, req.dou);
-        ROS_INFO("[DEBUG] req.type=%d, setting state=%s", req.type, req.type == 0 ? "2(AUTO_WORKING)" : "3(TEMP_WORKING)");
+        ROS_INFO("\033[36m[BT]\033[0m Received service task: taskID=%d, type=%d, bin=%d, hopper=%d", req.taskID, req.type, req.cang, req.dou);
+        ROS_INFO("\033[36m[BT]\033[0m DEBUG: req.type=%d, setting state=%s", req.type, req.type == 0 ? "2(AUTO_WORKING)" : "3(TEMP_WORKING)");
         std::string type_str = (req.type == 0) ? "auto" : "temp";
         Task task(req.taskID, req.cang, req.dou, req.type, type_str);
         GlobalState::getInstance().addTask(task);
@@ -632,7 +648,7 @@ int main(int argc, char** argv)
     
     AutonomousLoaderBTNode node(nh);
     
-    ROS_INFO("Autonomous loader robot behavior tree node started");
+    ROS_INFO("\033[36m[BT]\033[0m Autonomous loader robot behavior tree node started");
     
     ros::AsyncSpinner spinner(1);
     spinner.start();

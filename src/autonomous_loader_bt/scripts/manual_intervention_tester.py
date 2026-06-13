@@ -87,15 +87,16 @@ class ManualInterventionMockNav:
         self.log.warning("Switched navigation mode to %s", MODE_LABEL[mode])
 
     # ---------- Action 回调 ----------
+# ---------- Action 回调 ----------
     def _execute_cb(self, goal):
         mode = self._mode
 
-        # 🛠️ 1. 核心修复：把提取坐标和计算距离的代码“提前”到这里！
+        # 1. 提取坐标和计算距离
         gx, gy = goal.end_pose.pose.position.x, goal.end_pose.pose.position.y
         dx, dy = gx - self._cur_x, gy - self._cur_y
         dist = max(math.hypot(dx, dy), 0.1)
 
-        # 🛠️ 2. 发送初始的规划反馈，必须带上算好的 distance_to_goal=dist
+        # 2. 发送初始的规划反馈
         if mode in [NavMode.PLAN_FAIL, NavMode.RECOVERABLE_FAIL]:
             planning_feedback = NavigateFeedback(plan_succeeded=False, distance_to_goal=dist)
             self._srv.publish_feedback(planning_feedback)
@@ -103,35 +104,48 @@ class ManualInterventionMockNav:
             planning_feedback = NavigateFeedback(plan_succeeded=True, distance_to_goal=dist)
             self._srv.publish_feedback(planning_feedback)
 
-        # ---------- 下面的逻辑保持不变 ----------
         if mode == NavMode.PLAN_FAIL:
-            self.log.warning("Simulating PLAN FAILURE for goal (%.2f, %.2f)",
-                          gx, gy)
-            result = NavigateResult(success=False, 
-                                    error_code=101, error_msg="Fatal: Global planner failed (mock)")
+            self.log.warning("Simulating PLAN FAILURE for goal (%.2f, %.2f)", gx, gy)
+            result = NavigateResult(success=False, error_code=101, error_msg="Fatal: Global planner failed (mock)")
             self._srv.set_aborted(result, "planning failed (mock)")
             return
 
         if mode == NavMode.RECOVERABLE_FAIL:
-            self.log.warning("Simulating RECOVERABLE FAILURE for goal (%.2f, %.2f)",
-                          gx, gy)
-            result = NavigateResult(success=False, 
-                                    error_code=102, error_msg="Recoverable: Robot temporarily stuck (mock)")
+            self.log.warning("Simulating RECOVERABLE FAILURE for goal (%.2f, %.2f)", gx, gy)
+            result = NavigateResult(success=False, error_code=102, error_msg="Recoverable: Robot temporarily stuck (mock)")
             self._srv.set_aborted(result, "recoverable failure (mock)")
             return
 
         duration = dist / self._speed
         st = rospy.Time.now()
-        last_s = getattr(goal, "last_status", 2)
-        cur_s  = getattr(goal, "current_status", 2)
-        self.log.info("Goal (%.2f,%.2f) status %s->%s travel %.2fs mode=%s",
-                      gx, gy, STATUS_LABELS.get(last_s, '?'), STATUS_LABELS.get(cur_s, '?'), duration, MODE_LABEL[mode])
+        
+        # 🛠️ 终极护盾：记录是否在起步时检测到了“幽灵信号”
+        ghost_signal_detected = False
+
+        self.log.info("Goal (%.2f,%.2f) travel %.2fs mode=%s", gx, gy, duration, MODE_LABEL[mode])
 
         while not rospy.is_shutdown():
+            current_time = (rospy.Time.now() - st).to_sec()
+            
+            # 检查是否有打断/取消请求
             if self._srv.is_preempt_requested():
-                self._srv.set_preempted()
-                return
-            prog = min((rospy.Time.now()-st).to_sec()/duration, 1.0)
+                if current_time < 0.5:
+                    # 如果在起步 0.5 秒内就检测到了，认定为历史残留的幽灵信号
+                    if not ghost_signal_detected:
+                        self.log.info("【护盾激活】检测到幽灵取消信号，本次导航将全程免疫！")
+                        ghost_signal_detected = True
+                else:
+                    # 如果 0.5 秒之后还在报警
+                    if ghost_signal_detected:
+                        # 说明这是之前的幽灵信号没散去，我们继续无视它！
+                        pass 
+                    else:
+                        # 如果起步时没幽灵，半路突然要求取消，说明是真正的新紧急命令！
+                        self.log.warning("Action preempted by real cancel request.")
+                        self._srv.set_preempted()
+                        return
+
+            prog = min(current_time / duration, 1.0)
             fb = NavigateFeedback(distance_to_goal=dist*(1.0-prog), plan_succeeded=True)
             self._srv.publish_feedback(fb)
             if prog >= 1.0:
@@ -139,15 +153,12 @@ class ManualInterventionMockNav:
             self._feedback_rate.sleep()
 
         self._cur_x, self._cur_y = gx, gy
-        result = NavigateResult(success=True,
-                                final_distance_error=0.1, final_angle_error=1.0,
-                                error_code=0, error_msg="Success")
+        result = NavigateResult(success=True, final_distance_error=0.1, final_angle_error=1.0, error_code=0, error_msg="Success")
         if mode == NavMode.BAD_ARRIVAL:
             result.final_distance_error = 3.0
             result.final_angle_error    = 45.0
         self._srv.set_succeeded(result, "goal reached (mock)")
         self.log.info("Goal reached, result sent (mode %s)", MODE_LABEL[mode])
-
 # -------------------- 交互控制器 ------------------------------
 class ManualInterventionTester:
     def __init__(self, nav_mock: ManualInterventionMockNav):

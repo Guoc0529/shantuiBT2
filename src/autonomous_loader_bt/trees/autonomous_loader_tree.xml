@@ -605,6 +605,9 @@
                                   重置状态准备下一循环，并检查是否有待执行的避障
                                 -->
                                 <Sequence name="SEQ_AFTER_CYCLE_DONE">
+                                    <SetWorkState value="8"/>
+                                    <!-- 延迟一秒 -->
+                                    <Sleep msec="1000"/>
                                     <SetWorkState value="1"/>
                                     <Script code="just_left_hopper:=true"/>
 

@@ -36,7 +36,7 @@ bool ConfigManager::loadConfig(const std::string& config_file)
                 double x = pose_node["position"]["x"].as<double>();
                 double y = pose_node["position"]["y"].as<double>();
                 double z = pose_node["position"]["z"].as<double>();
-                ROS_INFO("Loaded cang %s position: x=%.2f, y=%.2f, z=%.2f", 
+                ROS_INFO("\033[36m[BT]\033[0m Loaded cang %s position: x=%.2f, y=%.2f, z=%.2f", 
                          cang_id.c_str(), x, y, z);
             }
         }
@@ -48,7 +48,7 @@ bool ConfigManager::loadConfig(const std::string& config_file)
                 double x = pose_node["position"]["x"].as<double>();
                 double y = pose_node["position"]["y"].as<double>();
                 double z = pose_node["position"]["z"].as<double>();
-                ROS_INFO("Loaded dou %s position: x=%.2f, y=%.2f, z=%.2f", 
+                ROS_INFO("\033[36m[BT]\033[0m Loaded dou %s position: x=%.2f, y=%.2f, z=%.2f", 
                          dou_id.c_str(), x, y, z);
             }
         }
@@ -57,7 +57,7 @@ bool ConfigManager::loadConfig(const std::string& config_file)
 
 
         config_loaded_ = true;
-        ROS_INFO("Successfully loaded config file: %s", config_file.c_str());
+        ROS_INFO("\033[36m[BT]\033[0m Successfully loaded config file: %s", config_file.c_str());
         return true;
     } catch (const YAML::Exception& e) {
         ROS_ERROR("\033[31m[BT] Failed to load config file: %s\033[0m", e.what());
@@ -133,7 +133,7 @@ bool ConfigManager::parsePoseEntry(const YAML::Node& entry,
     }
 
     if (!position_ok || !orientation_ok) {
-        ROS_WARN("[BT] Failed to parse pose for %s (position_ok=%d, orientation_ok=%d)",
+        ROS_WARN("\033[33m[BT]\033[0m Failed to parse pose for %s (position_ok=%d, orientation_ok=%d)",
                  context.c_str(), static_cast<int>(position_ok), static_cast<int>(orientation_ok));
     }
 
@@ -147,7 +147,7 @@ geometry_msgs::PoseStamped ConfigManager::getBinCenter(int bin_id)
     pose.header.stamp = ros::Time::now();
     
     if (!config_loaded_) {
-        ROS_WARN("\033[33m[BT] Config file not loaded, using default bin location\033[0m");
+        ROS_WARN("\033[33m[BT]\033[0m Config file not loaded, using default bin location");
         pose.pose.position.x = 10.0;
         pose.pose.position.y = 10.0;
         tf2::Quaternion q; q.setRPY(0, 0, 0);
@@ -158,14 +158,14 @@ geometry_msgs::PoseStamped ConfigManager::getBinCenter(int bin_id)
     std::string cang_key = std::to_string(bin_id);
     if (config_["cang"][cang_key]) {
         if (!parsePoseEntry(config_["cang"][cang_key], pose, "cang[" + cang_key + "]")) {
-            ROS_WARN("\033[33m[BT] Bin %d pose parse failed, falling back to default\033[0m", bin_id);
+            ROS_WARN("\033[33m[BT]\033[0m Bin %d pose parse failed, falling back to default", bin_id);
             pose.pose.position.x = 10.0;
             pose.pose.position.y = 10.0;
             tf2::Quaternion q; q.setRPY(0, 0, 0);
             pose.pose.orientation = tf2::toMsg(q);
         }
     } else {
-        ROS_WARN("Bin %d config not found, using default location", bin_id);
+        ROS_WARN("\033[33m[BT]\033[0m Bin %d config not found, using default location", bin_id);
         pose.pose.position.x = 10.0;
         pose.pose.position.y = 10.0;
         tf2::Quaternion q; q.setRPY(0, 0, 0);
@@ -181,7 +181,7 @@ geometry_msgs::PoseStamped ConfigManager::getHopperPose(int hopper_id)
     pose.header.stamp = ros::Time::now();
     
     if (!config_loaded_) {
-        ROS_WARN("Config file not loaded, using default hopper location");
+        ROS_WARN("\033[33m[BT]\033[0m Config file not loaded, using default hopper location");
         pose.pose.position.x = 5.0;
         pose.pose.position.y = 5.0;
         tf2::Quaternion q; q.setRPY(0, 0, 0);
@@ -192,14 +192,14 @@ geometry_msgs::PoseStamped ConfigManager::getHopperPose(int hopper_id)
     std::string dou_key = std::to_string(hopper_id);
     if (config_["dou"][dou_key]) {
         if (!parsePoseEntry(config_["dou"][dou_key], pose, "dou[" + dou_key + "]")) {
-            ROS_WARN("Hopper %d pose parse failed, falling back to default", hopper_id);
+            ROS_WARN("\033[33m[BT]\033[0m Hopper %d pose parse failed, falling back to default", hopper_id);
             pose.pose.position.x = 5.0;
             pose.pose.position.y = 5.0;
             tf2::Quaternion q; q.setRPY(0, 0, 0);
             pose.pose.orientation = tf2::toMsg(q);
         }
     } else {
-        ROS_WARN("Hopper %d config not found, using default location", hopper_id);
+        ROS_WARN("\033[33m[BT]\033[0m Hopper %d config not found, using default location", hopper_id);
         pose.pose.position.x = 5.0;
         pose.pose.position.y = 5.0;
         tf2::Quaternion q; q.setRPY(0, 0, 0);
@@ -215,7 +215,7 @@ geometry_msgs::PoseStamped ConfigManager::getParkingPose(const std::string& park
     pose.header.stamp = ros::Time::now();
     
     if (!config_loaded_) {
-        ROS_WARN("Config file not loaded, using default parking location");
+        ROS_WARN("\033[33m[BT]\033[0m Config file not loaded, using default parking location");
         tf2::Quaternion q; q.setRPY(0, 0, 0);
         pose.pose.orientation = tf2::toMsg(q);
         return pose;
@@ -223,12 +223,12 @@ geometry_msgs::PoseStamped ConfigManager::getParkingPose(const std::string& park
     
     if (config_["parking"][parking_name]) {
         if (!parsePoseEntry(config_["parking"][parking_name], pose, "parking[" + parking_name + "]")) {
-            ROS_WARN("Parking %s pose parse failed, using default", parking_name.c_str());
+            ROS_WARN("\033[33m[BT]\033[0m Parking %s pose parse failed, using default", parking_name.c_str());
             tf2::Quaternion q; q.setRPY(0, 0, 0);
             pose.pose.orientation = tf2::toMsg(q);
         }
     } else {
-        ROS_WARN("Parking point %s config not found, using default location", parking_name.c_str());
+        ROS_WARN("\033[33m[BT]\033[0m Parking point %s config not found, using default location", parking_name.c_str());
         tf2::Quaternion q; q.setRPY(0, 0, 0);
         pose.pose.orientation = tf2::toMsg(q);
     }
@@ -240,7 +240,7 @@ double ConfigManager::getDistanceThreshold(const std::string& threshold_name)
     if (config_loaded_ && config_["work_parameters"]["distance_thresholds"][threshold_name]) {
         return config_["work_parameters"]["distance_thresholds"][threshold_name].as<double>();
     }
-    ROS_WARN("Distance threshold '%s' not found, using default 6.0m", threshold_name.c_str());
+    ROS_WARN("\033[33m[BT]\033[0m Distance threshold '%s' not found, using default 6.0m", threshold_name.c_str());
     return 6.0;
 }
 
@@ -249,7 +249,7 @@ double ConfigManager::getTimeout(const std::string& timeout_name)
     if (config_loaded_ && config_["work_parameters"]["timeouts"][timeout_name]) {
         return config_["work_parameters"]["timeouts"][timeout_name].as<double>();
     }
-    ROS_WARN("Timeout '%s' not found, using default 60.0s", timeout_name.c_str());
+    ROS_WARN("\033[33m[BT]\033[0m Timeout '%s' not found, using default 60.0s", timeout_name.c_str());
     return 60.0;
 }
 
@@ -510,7 +510,7 @@ void GlobalState::resetDistanceToGoal()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     distance_to_goal_ = 1000.0;
-    ROS_INFO("Reset distance_to_goal to 1000.0");
+    ROS_INFO("\033[36m[BT]\033[0m Reset distance_to_goal to 1000.0");
 }
 
 void GlobalState::resetDistanceReduction()
@@ -518,7 +518,7 @@ void GlobalState::resetDistanceReduction()
     std::lock_guard<std::mutex> lock(mutex_);
     segment_start_distance_ = -1.0;
     segment_max_reduction_ = 0.0;
-    ROS_INFO("[DistReduce] Reset segment distance reduction trackers");
+    ROS_INFO("\033[36m[DistReduce]\033[0m Reset segment distance reduction trackers");
 }
 
 void GlobalState::updateDistanceReduction(double current_distance_to_goal)
@@ -535,7 +535,7 @@ void GlobalState::updateDistanceReduction(double current_distance_to_goal)
         current_distance_to_goal > 1.0 && current_distance_to_goal < 900.0) {
         segment_start_distance_ = current_distance_to_goal;
         segment_max_reduction_  = 0.0;
-        ROS_INFO("[DistReduce] Segment start distance set: %.2f m", segment_start_distance_);
+        ROS_INFO("\033[36m[DistReduce]\033[0m Segment start distance set: %.2f m", segment_start_distance_);
     }
     if (segment_start_distance_ < 0.0) {
         // still not initialized, skip
@@ -546,7 +546,7 @@ void GlobalState::updateDistanceReduction(double current_distance_to_goal)
     if (reduction > segment_max_reduction_) {
         segment_max_reduction_ = reduction;
     }
-    ROS_INFO_THROTTLE(1.0, "[DistReduce] delta=%.2f m (max=%.2f)", reduction, segment_max_reduction_);
+    ROS_INFO_THROTTLE(1.0, "\033[36m[DistReduce]\033[0m delta=%.2f m (max=%.2f)", reduction, segment_max_reduction_);
 }
 
 double GlobalState::getMaxDistanceReduction() const
@@ -728,15 +728,15 @@ BT::NodeStatus CheckErrorCode::tick()
             }
         }
         catch (const std::exception& e) {
-            ROS_ERROR("[BT] Invalid value in recoverable_codes string: '%s'", item.c_str());
+            ROS_ERROR("\033[31m[BT]\033[0m Invalid value in recoverable_codes string: '%s'", item.c_str());
         }
     }
 
     if (is_recoverable) {
-        ROS_INFO("[BT] Recoverable error code received: %d. Attempting automatic retry.", error_code);
+        ROS_INFO("\033[36m[BT]\033[0m Recoverable error code received: %d. Attempting automatic retry.", error_code);
         return BT::NodeStatus::SUCCESS; // Allow retry
     } else {
-        ROS_WARN("[BT] Non-recoverable error code received: %d. Manual intervention is required.", error_code);
+        ROS_WARN("\033[33m[BT]\033[0m Non-recoverable error code received: %d. Manual intervention is required.", error_code);
         return BT::NodeStatus::FAILURE; // Request manual intervention
     }
 }
@@ -786,14 +786,14 @@ BT::NodeStatus CheckEndTaskAfterCycle::tick()
 BT::NodeStatus CheckNewTask::tick()
 {
     bool has_task = GlobalState::getInstance().hasNewTask();
-    ROS_INFO_THROTTLE(5.0, "[BT_DEBUG] CheckNewTask: hasNewTask=%d", has_task);
+    ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckNewTask: hasNewTask=%d", has_task);
     return has_task ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::NodeStatus CheckStartTask::tick()
 {
     bool can_start = GlobalState::getInstance().isStartTask();
-    ROS_INFO_THROTTLE(5.0, "[BT_DEBUG] CheckStartTask: isStartTask=%d", can_start);
+    ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckStartTask: isStartTask=%d", can_start);
     return can_start ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
@@ -802,7 +802,7 @@ BT::NodeStatus CheckNavigationArrived::tick()
     std::string msg;
     getInput("message", msg);
     if (GlobalState::getInstance().isNavigationArrived()) {
-        ROS_INFO("[NAV] Arrival confirmed for: %s", msg.c_str());
+        ROS_INFO("\033[36m[NAV]\033[0m Arrival confirmed for: %s", msg.c_str());
         return BT::NodeStatus::SUCCESS;
     }
     return BT::NodeStatus::FAILURE;
@@ -818,7 +818,7 @@ BT::NodeStatus CheckDistanceThreshold::tick()
     
     double threshold = config.getDistanceThreshold(threshold_name);
     double current_distance = state.getDistanceToGoal();
-    ROS_INFO("[CheckDist] Current distance: %.2f m, threshold: %.2f m", current_distance, threshold);
+        ROS_INFO("\033[33m[CheckDist]\033[0m Current distance: %.2f m, threshold: %.2f m", current_distance, threshold);
     return current_distance <= threshold ? BT::NodeStatus::SUCCESS : BT::NodeStatus::RUNNING;
 }
 
@@ -840,9 +840,9 @@ BT::NodeStatus CheckDistanceSinceScoop::tick()
     if (getInput("threshold_name", threshold_name) && !threshold_name.empty()) {
         auto& config = ConfigManager::getInstance();
         distance_gt = config.getDistanceThreshold(threshold_name);
-        ROS_INFO("[CheckDistanceSinceScoop] Using config threshold '%s': %.2f", threshold_name.c_str(), distance_gt);
+        ROS_INFO_THROTTLE(1.0, "\033[33m[CheckDist]\033[0m Using config threshold '%s': %.2f", threshold_name.c_str(), distance_gt);
     } else if (!getInput("distance_gt", distance_gt)) {
-        ROS_ERROR("[BT] [CheckDistanceSinceScoop] Missing required input 'distance_gt' or 'threshold_name'");
+        ROS_ERROR("\033[31m[BT]\033[0m [CheckDistanceSinceScoop] Missing required input 'distance_gt' or 'threshold_name'");
         return BT::NodeStatus::FAILURE;
     }
 
@@ -850,11 +850,11 @@ BT::NodeStatus CheckDistanceSinceScoop::tick()
     double reduced = state.getMaxDistanceReduction();
 
     if (reduced >= distance_gt) {
-        ROS_INFO("[CheckDist] Distance since scoop: %.2f m >= threshold %.2f m. Success.", reduced, distance_gt);
+        ROS_INFO("\033[33m[CheckDist]\033[0m Distance since scoop: %.2f m >= threshold %.2f m. Success.", reduced, distance_gt);
         return BT::NodeStatus::SUCCESS;
     }
 
-    ROS_INFO_THROTTLE(1.0, "[CheckDist] Distance since scoop: %.2f m (threshold=%.2f m)", reduced, distance_gt);
+    ROS_INFO_THROTTLE(1.0, "\033[33m[CheckDist]\033[0m Distance since scoop: %.2f m (threshold=%.2f m)", reduced, distance_gt);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -866,9 +866,9 @@ BT::NodeStatus CheckDistanceFromLastHopper::tick()
     if (getInput("threshold_name", threshold_name) && !threshold_name.empty()) {
         auto& config = ConfigManager::getInstance();
         distance_gt = config.getDistanceThreshold(threshold_name);
-        ROS_INFO("[CheckDistanceFromLastHopper] Using config threshold '%s': %.2f", threshold_name.c_str(), distance_gt);
+        ROS_INFO("\033[33m[CheckDist]\033[0m Using config threshold '%s': %.2f", threshold_name.c_str(), distance_gt);
     } else if (!getInput("distance_gt", distance_gt)) {
-        ROS_ERROR("[BT] [CheckDistanceFromLastHopper] Missing required input 'distance_gt' or 'threshold_name'");
+        ROS_ERROR("\033[31m[BT]\033[0m [CheckDistanceFromLastHopper] Missing required input 'distance_gt' or 'threshold_name'");
         return BT::NodeStatus::FAILURE;
     }
 
@@ -878,15 +878,15 @@ BT::NodeStatus CheckDistanceFromLastHopper::tick()
     static bool first_tick = true;
     if(first_tick)
     {
-        ROS_INFO("[CheckDist delta] Node is active. distance_gt=%.2f", distance_gt);
+        ROS_INFO("\033[33m[CheckDist delta]\033[0m Node is active. distance_gt=%.2f", distance_gt);
         first_tick = false;
     }
 
     if (reduced >= distance_gt) {
-        ROS_INFO("[CheckDist] Reduced distance since segment start: %.2f m >= threshold %.2f m. Success.", reduced, distance_gt);
+        ROS_INFO("\033[33m[CheckDist]\033[0m Reduced distance since segment start: %.2f m >= threshold %.2f m. Success.", reduced, distance_gt);
         return BT::NodeStatus::SUCCESS;
     }
-    ROS_INFO_THROTTLE(1.0, "[CheckDist delta] Reduced: %.2f m (th=%.2f)", reduced, distance_gt);
+    ROS_INFO_THROTTLE(1.0, "\033[33m[CheckDist delta]\033[0m Reduced: %.2f m (th=%.2f)", reduced, distance_gt);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -903,7 +903,7 @@ BT::NodeStatus CheckArmBucketDone::tick()
         return BT::NodeStatus::FAILURE;
     }
     bool done = (abs_state == 10);
-    ROS_INFO_THROTTLE(1.0, "[ABS] CheckArmBucketDone: expect=%d, last_cmd=%d, state=%d -> %s", expect_code, last_cmd, abs_state, done?"DONE":"NOT DONE");
+    ROS_INFO_THROTTLE(1.0, "\033[35m[ABS]\033[0m CheckArmBucketDone: expect=%d, last_cmd=%d, state=%d -> %s", expect_code, last_cmd, abs_state, done?"DONE":"NOT DONE");
     return done ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
@@ -915,7 +915,7 @@ BT::NodeStatus CheckArmBucketCommandSent::tick()
     getInput("expect_code", expect_code);
     nh.getParam("LastABSCommand", last_cmd);
     bool sent = (last_cmd == expect_code);
-    ROS_INFO_THROTTLE(1.0, "[ABS] CheckArmBucketCommandSent: expect=%d, last_cmd=%d -> %s", expect_code, last_cmd, sent?"SENT":"NOT SENT");
+    ROS_INFO_THROTTLE(1.0, "\033[35m[ABS]\033[0m CheckArmBucketCommandSent: expect=%d, last_cmd=%d -> %s", expect_code, last_cmd, sent?"SENT":"NOT SENT");
     return sent ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
@@ -934,7 +934,7 @@ BT::NodeStatus SetWorkState::tick()
     if (!getInput("value", value)) {
         // No value provided, use GlobalState work_state
         value = GlobalState::getInstance().getWorkState();
-        ROS_INFO("[BT] SetWorkState: using GlobalState work_state=%d", value);
+        ROS_INFO("\033[36m[BT]\033[0m SetWorkState: using GlobalState work_state=%d", value);
     }
     ros::param::set("/workstate", value);
 
@@ -945,7 +945,7 @@ BT::NodeStatus SetWorkState::tick()
         autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(task_id_int);
     }
 
-    ROS_INFO("[BT] Set /workstate to %d", value);
+        ROS_INFO("\033[36m[BT]\033[0m Set /workstate to %d", value);
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -954,21 +954,21 @@ BT::NodeStatus SetWorkState::tick()
 BT::NodeStatus CheckObstacleTriggered::tick()
 {
     bool triggered = GlobalState::getInstance().isObstacleTriggered();
-    ROS_INFO_THROTTLE(5.0, "[BT] CheckObstacleTriggered: %s", triggered ? "YES" : "NO");
+    ROS_INFO_THROTTLE(5.0, "\033[36m[BT]\033[0m CheckObstacleTriggered: %s", triggered ? "YES" : "NO");
     return triggered ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::NodeStatus CheckRestoreRequested::tick()
 {
     bool requested = GlobalState::getInstance().isRestoreRequested();
-    ROS_INFO_THROTTLE(5.0, "[BT] CheckRestoreRequested: %s", requested ? "YES" : "NO");
+    ROS_INFO_THROTTLE(5.0, "\033[36m[BT]\033[0m CheckRestoreRequested: %s", requested ? "YES" : "NO");
     return requested ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::NodeStatus CheckObstaclePending::tick()
 {
     bool pending = GlobalState::getInstance().isObstaclePending();
-    ROS_INFO_THROTTLE(5.0, "[BT] CheckObstaclePending: %s", pending ? "YES" : "NO");
+    ROS_INFO_THROTTLE(5.0, "\033[36m[BT]\033[0m CheckObstaclePending: %s", pending ? "YES" : "NO");
     return pending ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
@@ -976,7 +976,7 @@ BT::NodeStatus HornAndHazard::tick()
 {
     const int duration_ms = 2000;  // 固定2秒
 
-    ROS_INFO("[BT] HornAndHazard: Horn ON + Hazard lights ON for %d ms", duration_ms);
+    ROS_INFO("\033[36m[BT]\033[0m HornAndHazard: Horn ON + Hazard lights ON for %d ms", duration_ms);
 
     auto& topic_mgr = ROSTopicManager::getInstance();
     topic_mgr.hornOn();
@@ -985,7 +985,7 @@ BT::NodeStatus HornAndHazard::tick()
     // 等待指定时间
     ros::Duration(duration_ms / 1000.0).sleep();
 
-    ROS_INFO("\033[36m[BT] HornAndHazard: Horn OFF\033[0m");
+    ROS_INFO("\033[36m[BT]\033[0m HornAndHazard: Horn OFF");
     topic_mgr.hornOff();
 
     return BT::NodeStatus::SUCCESS;
@@ -993,7 +993,7 @@ BT::NodeStatus HornAndHazard::tick()
 
 BT::NodeStatus HazardLightsOff::tick()
 {
-    ROS_INFO("\033[36m[BT] HazardLightsOff: Hazard lights OFF\033[0m");
+    ROS_INFO("\033[36m[BT]\033[0m HazardLightsOff: Hazard lights OFF");
     ROSTopicManager::getInstance().hazardLightsOff();
     return BT::NodeStatus::SUCCESS;
 }
@@ -1010,7 +1010,7 @@ BT::NodeStatus SetObstacleTarget::tick()
         // 从TaskCtrl来的坐标
         obstacle_target = gs.getObstacleTarget();
         target = obstacle_target;
-        ROS_INFO("[BT] SetObstacleTarget: Using TaskCtrl target (%.2f, %.2f)",
+        ROS_INFO("\033[36m[BT]\033[0m SetObstacleTarget: Using TaskCtrl target (%.2f, %.2f)",
                  target.pose.position.x, target.pose.position.y);
     } else {
         // 从配置获取坐标
@@ -1023,7 +1023,7 @@ BT::NodeStatus SetObstacleTarget::tick()
         }
 
         target = ConfigManager::getInstance().getParkingPose(point_name);
-        ROS_INFO("[BT] SetObstacleTarget: Using config point '%s' (%.2f, %.2f)",
+        ROS_INFO("\033[36m[BT]\033[0m SetObstacleTarget: Using config point '%s' (%.2f, %.2f)",
                  point_name.c_str(), target.pose.position.x, target.pose.position.y);
     }
 
@@ -1039,7 +1039,7 @@ BT::NodeStatus ActivateObstaclePending::tick()
     if (gs.isObstaclePending()) {
         gs.setObstacleTriggered(true);
         gs.setObstaclePending(false);  // 清除待执行标记
-        ROS_INFO("[BT] ActivateObstaclePending: Activated obstacle avoidance, pending->triggered");
+        ROS_INFO("\033[36m[BT]\033[0m ActivateObstaclePending: Activated obstacle avoidance, pending->triggered");
     }
     return BT::NodeStatus::SUCCESS;
 }
@@ -1049,7 +1049,7 @@ BT::NodeStatus NavigateToObstacle::onStart()
     start_time_ = ros::Time::now();
     auto target = GlobalState::getInstance().getObstacleTarget();
     ROSTopicManager::getInstance().sendObstacleNavigationGoal(target);
-    ROS_INFO("[BT] NavigateToObstacle: Started navigation to obstacle point");
+    ROS_INFO("\033[36m[BT]\033[0m NavigateToObstacle: Started navigation to obstacle point");
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1058,13 +1058,13 @@ BT::NodeStatus NavigateToObstacle::onRunning()
     auto& gs = GlobalState::getInstance();
 
     if (gs.isNavigationArrived()) {
-        ROS_INFO("[BT] NavigateToObstacle: Arrived at obstacle point");
+        ROS_INFO("\033[36m[BT]\033[0m NavigateToObstacle: Arrived at obstacle point");
         return BT::NodeStatus::SUCCESS;
     }
 
     // 超时保护：5分钟
     if ((ros::Time::now() - start_time_).toSec() > 300) {
-        ROS_WARN("[BT] NavigateToObstacle: Timeout after 300s");
+        ROS_WARN("\033[33m[BT]\033[0m NavigateToObstacle: Timeout after 300s");
         return BT::NodeStatus::FAILURE;
     }
 
@@ -1073,7 +1073,7 @@ BT::NodeStatus NavigateToObstacle::onRunning()
 
 void NavigateToObstacle::onHalted()
 {
-    ROS_INFO("[BT] NavigateToObstacle: Halted");
+    ROS_INFO("\033[36m[BT]\033[0m NavigateToObstacle: Halted");
     ROSTopicManager::getInstance().cancelMoveBaseGoal();
 }
 
@@ -1083,11 +1083,11 @@ BT::NodeStatus WaitForRestore::tick()
     bool requested = GlobalState::getInstance().isRestoreRequested();
 
     if (requested) {
-        ROS_INFO("[BT] WaitForRestore: Restore signal received!");
+        ROS_INFO("\033[36m[BT]\033[0m WaitForRestore: Restore signal received!");
         return BT::NodeStatus::SUCCESS;
     }
 
-    ROS_INFO_THROTTLE(2.0, "[BT] WaitForRestore: Waiting for restore signal...");
+    ROS_INFO_THROTTLE(2.0, "\033[36m[BT]\033[0m WaitForRestore: Waiting for restore signal...");
     return BT::NodeStatus::FAILURE;
 }
 
@@ -1096,7 +1096,7 @@ BT::NodeStatus ClearRestoreRequested::tick()
     GlobalState::getInstance().setRestoreRequested(false);
     GlobalState::getInstance().setObstacleTriggered(false);
     GlobalState::getInstance().setObstacleType(0);
-    ROS_INFO("[BT] ClearRestoreRequested: Cleared restore and obstacle flags");
+    ROS_INFO("\033[36m[BT]\033[0m ClearRestoreRequested: Cleared restore and obstacle flags");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1116,18 +1116,18 @@ BT::NodeStatus SetArmBucketState::tick()
     // 保存当前的 code 到 GlobalState
     GlobalState::getInstance().setArmBucketCode(code);
     
-    // 发布"进行中"消息
+    // 发布动作状态（英文，用于topic发布）
     std::string status_msg;
     switch(code) {
-        case 1: status_msg = "Flattening bucket to ground in progress"; break;
-        case 2: status_msg = "Raising bucket to transit position in progress"; break;
-        case 3: status_msg = "Leveling bucket in progress"; break;
-        case 4: status_msg = "Raising arm in progress"; break;
-        case 5: status_msg = "Lowering arm in progress"; break;
-        case 6: status_msg = "Dumping in progress"; break;
-        case 7: status_msg = "Scooping in progress"; break;
-        case 8: status_msg = "Shaking bucket in progress"; break;
-        default: status_msg = "Arm and bucket action in progress"; break;
+        case 1: status_msg = "1: Bucket Shaping"; break;
+        case 2: status_msg = "2: Bucket to Transit"; break;
+        case 3: status_msg = "3: Bucket Leveling"; break;
+        case 4: status_msg = "4: Arm Raising"; break;
+        case 5: status_msg = "5: Arm Lowering"; break;
+        case 6: status_msg = "6: Dumping"; break;
+        case 7: status_msg = "7: Scooping"; break;
+        case 8: status_msg = "8: Material Dumping"; break;
+        default: status_msg = "Arm/Bucket Action"; break;
     }
     ROSTopicManager::getInstance().publishActionStatus(status_msg);
     
@@ -1153,7 +1153,7 @@ void WaitForManualIntervention::interventionCallback(const std_msgs::Bool::Const
 BT::NodeStatus WaitForManualIntervention::onStart()
 {
     intervention_complete_ = false;
-    ROS_INFO("[BT] Waiting for manual intervention to complete...");
+        ROS_INFO("\033[36m[BT]\033[0m Waiting for manual intervention to complete...");
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1167,7 +1167,7 @@ BT::NodeStatus WaitForManualIntervention::onRunning()
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;
         // estop_pub_.publish(estop_msg);
-        ROS_INFO("[BT] Manual intervention finished. E-Stop released.");
+        ROS_INFO("\033[36m[BT]\033[0m Manual intervention finished. E-Stop released.");
 
         intervention_complete_ = false; // Reset the state for the next time
         return BT::NodeStatus::SUCCESS;
@@ -1193,7 +1193,7 @@ WaitForManualOverride::WaitForManualOverride(const std::string& name, const BT::
 void WaitForManualOverride::interventionCallback(const std_msgs::Bool::ConstPtr& msg)
 {
     if (msg->data) {
-        ROS_INFO("[BT] Manual override complete signal received.");
+        ROS_INFO("\033[36m[BT]\033[0m Manual override complete signal received.");
         intervention_complete_ = true;
     }
 }
@@ -1205,7 +1205,7 @@ BT::NodeStatus WaitForManualOverride::onStart()
     }
     intervention_complete_ = false;
     start_time_ = ros::Time::now();
-    ROS_WARN("[BT] Waiting for manual override... (timeout: %.1fs)", timeout_s_);
+    ROS_WARN("\033[33m[BT]\033[0m Waiting for manual override... (timeout: %.1fs)", timeout_s_);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1218,14 +1218,14 @@ BT::NodeStatus WaitForManualOverride::onRunning()
     if ((now - last_pub_time).toSec() > 1.0) {
         auto pose = GlobalState::getInstance().getCurrentPose();
         vehicle_pose_pub_.publish(pose);
-        ROS_INFO_THROTTLE(1.0, "[ManualOverride] 等待接管完成. 当前车辆: (%.2f, %.2f)",
+        ROS_INFO_THROTTLE(1.0, "\033[33m[ManualOverride]\033[0m Waiting for override. Vehicle: (%.2f, %.2f)",
                           pose.pose.position.x, pose.pose.position.y);
         last_pub_time = now;
     }
 
     // 检查超时
     if ((now - start_time_).toSec() > timeout_s_) {
-        ROS_ERROR("[BT] Manual override timeout after %.1fs.", timeout_s_);
+        ROS_ERROR("\033[31m[BT]\033[0m Manual override timeout after %.1fs.", timeout_s_);
         ros::param::set("/autonomous_loader/manual_intervention_required", false);
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;
@@ -1239,7 +1239,7 @@ BT::NodeStatus WaitForManualOverride::onRunning()
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;
         // estop_pub_.publish(estop_msg);
-        ROS_INFO("[BT] Manual override complete. E-Stop released.");
+        ROS_INFO("\033[36m[BT]\033[0m Manual override complete. E-Stop released.");
         intervention_complete_ = false;
         return BT::NodeStatus::SUCCESS;
     }
@@ -1267,7 +1267,7 @@ BT::NodeStatus WaitForArmBucketCompletion::onStart()
     std::string msg;
     getInput("message", msg);
 
-    ROS_INFO("[WAIT] %s. Waiting for 'ArmBucketState' to be set to 10 (by Work Device). Timeout: %.1fs", msg.c_str(), timeout_s_);
+    ROS_INFO("\033[33m[WAIT]\033[0m %s. Waiting for 'ArmBucketState' to be set to 10 (by Work Device). Timeout: %.1fs", msg.c_str(), timeout_s_);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1287,28 +1287,28 @@ BT::NodeStatus WaitForArmBucketCompletion::onRunning()
             std::string status_msg;
             switch(code) {
                 case 1: status_msg = "1: Bucket lowered to ground"; break;
-                case 2: status_msg = "2: Bucket lifted to transport position"; break;
+                case 2: status_msg = "2: Bucket lifted to transit"; break;
                 case 3: status_msg = "3: Bucket leveled"; break;
-                case 4: status_msg = "4: Boom lifted"; break;
-                case 5: status_msg = "5: Boom lowered"; break;
-                case 6: status_msg = "6: Material unloading done"; break;
-                case 7: status_msg = "7: Shoveling done"; break;
-                case 8: status_msg = "8: Shaking done"; break;
-                default: status_msg = "0: Arm/bucket operation done"; break;
+                case 4: status_msg = "4: Arm raised"; break;
+                case 5: status_msg = "5: Arm lowered"; break;
+                case 6: status_msg = "6: Dumping completed"; break;
+                case 7: status_msg = "7: Scooping completed"; break;
+                case 8: status_msg = "8: Material dumping done"; break;
+                default: status_msg = "0: Arm/Bucket operation done"; break;
             }
             ROSTopicManager::getInstance().publishActionStatus(status_msg);
             
             return BT::NodeStatus::SUCCESS;
         }
         if (value < 0) {
-            ROS_ERROR("[BT] WaitForArmBucketCompletion detected negative ArmBucketState=%d. Cancelling navigation and failing.", value);
+            ROS_ERROR("\033[31m[BT]\033[0m WaitForArmBucketCompletion detected negative ArmBucketState=%d. Cancelling navigation and failing.", value);
             // Cancel any ongoing navigation goal to avoid continuing to move after device error
             // ROSTopicManager::getInstance().cancelMoveBaseGoal();
             return BT::NodeStatus::FAILURE;
         }
     }
     if ((ros::Time::now() - start_time_).toSec() > timeout_s_) {
-        ROS_ERROR("[BT] WaitForArmBucketCompletion timeout after %.1fs", timeout_s_);
+        ROS_ERROR("\033[31m[BT]\033[0m WaitForArmBucketCompletion timeout after %.1fs", timeout_s_);
         // On timeout, also cancel navigation to keep system safe
         ROSTopicManager::getInstance().cancelMoveBaseGoal();
         return BT::NodeStatus::FAILURE;
@@ -1322,7 +1322,7 @@ BT::NodeStatus StartPointAccumulation::tick()
 {
     ros::NodeHandle nh;
     nh.setParam("/PointAccumulation", 1);
-    ROS_INFO("BT: Point accumulation STARTED.");
+    ROS_INFO("\033[36m[BT]\033[0m Point accumulation STARTED.");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1330,7 +1330,7 @@ BT::NodeStatus StopPointAccumulation::tick()
 {
     ros::NodeHandle nh;
     nh.setParam("/PointAccumulation", 0);
-    ROS_INFO("BT: Point accumulation STOPPED.");
+    ROS_INFO("\033[36m[BT]\033[0m Point accumulation STOPPED.");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1338,7 +1338,7 @@ BT::NodeStatus SetPointAccumulationStart::tick()
 {
     ros::NodeHandle nh("~");
     nh.setParam("PointAccumulation", 1);
-    ROS_INFO("BT: SetPointAccumulationStart triggered. Setting PointAccumulation to 1.");
+    ROS_INFO("\033[36m[BT]\033[0m SetPointAccumulationStart triggered. Setting PointAccumulation to 1.");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1352,7 +1352,7 @@ BT::NodeStatus WaitForPointAccumulationDone::onStart()
     std::string msg;
     getInput("message", msg);
 
-    ROS_INFO("[WAIT] %s. Waiting for 'PointAccumulation' to be set to 10 (by Calculation Module). Timeout: %.1fs", msg.c_str(), timeout_s_);
+    ROS_INFO("\033[33m[WAIT]\033[0m %s. Waiting for 'PointAccumulation' to be set to 10 (by Calculation Module). Timeout: %.1fs", msg.c_str(), timeout_s_);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1363,13 +1363,13 @@ BT::NodeStatus WaitForPointAccumulationDone::onRunning()
     if (nh.getParam("PointAccumulation", value)) {
         if (value == 10) {
             ROS_INFO("\033[32m[DONE]\033[0m Point accumulation completed. PointAccumulation reached 10");
-            ROSTopicManager::getInstance().publishActionStatus("Pointcloud accumulation completed");
+            ROSTopicManager::getInstance().publishActionStatus("Point cloud accumulation completed");
             return BT::NodeStatus::SUCCESS;
         }
         if (value < 0) { return BT::NodeStatus::FAILURE; }
     }
     if ((ros::Time::now() - start_time_).toSec() > timeout_s_) {
-        ROS_ERROR("[BT] WaitForPointAccumulationDone timeout after %.1fs", timeout_s_);
+        ROS_ERROR("\033[31m[BT]\033[0m WaitForPointAccumulationDone timeout after %.1fs", timeout_s_);
         return BT::NodeStatus::FAILURE;
     }
     return BT::NodeStatus::RUNNING;
@@ -1379,7 +1379,7 @@ void WaitForPointAccumulationDone::onHalted() {}
 
 BT::NodeStatus RequestScoopPoint::tick()
 {
-    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] RequestScoopPoint tick called");
+    ROS_INFO_THROTTLE(2.0, "\033[36m[SCOOP_DEBUG]\033[0m RequestScoopPoint tick called");
     
     auto& state = GlobalState::getInstance();
     uint8_t pileID = static_cast<uint8_t>(state.getCurrentTask().bin_id);
@@ -1387,20 +1387,20 @@ BT::NodeStatus RequestScoopPoint::tick()
     geometry_msgs::PoseStamped scoop_point;
     auto& topic_manager = ROSTopicManager::getInstance();
     
-    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] Requesting scoop point for pileID=%d", pileID);
+        ROS_INFO_THROTTLE(2.0, "\033[36m[SCOOP_DEBUG]\033[0m Requesting scoop point for pileID=%d", pileID);
     bool success = topic_manager.requestScoopPoint(pileID, scoop_point);
-    ROS_INFO_THROTTLE(2.0, "[SCOOP_DEBUG] requestScoopPoint returned: %d", success);
+        ROS_INFO_THROTTLE(2.0, "\033[36m[SCOOP_DEBUG]\033[0m requestScoopPoint returned: %d", success);
     
     if (success) {
         if (std::abs(scoop_point.pose.position.x) > 1e-3 || std::abs(scoop_point.pose.position.y) > 1e-3) {
             scoop_point.pose.position.x -= 1.0;
         }
         state.setScoopPoint(scoop_point);
-        ROS_INFO("[SCOOP] Successfully got scoop point for pile %d", static_cast<int>(pileID));
+        ROS_INFO("\033[36m[SCOOP]\033[0m Successfully got scoop point for pile %d", static_cast<int>(pileID));
         return BT::NodeStatus::SUCCESS;
     } else {
         // state.setScoopPoint(ConfigManager::getInstance().getBinCenter(pileID));
-        ROS_INFO_THROTTLE(1.0, "[SCOOP] Waiting for scoop point for pile %d...", static_cast<int>(pileID));
+        ROS_INFO_THROTTLE(1.0, "\033[36m[SCOOP]\033[0m Waiting for scoop point for pile %d...", static_cast<int>(pileID));
         return BT::NodeStatus::RUNNING;
     }
 }
@@ -1423,7 +1423,7 @@ BT::NodeStatus SendNavigationGoal::tick()
     if (last_send_had_goal_id && (now - last_send_time).toSec() < 0.3) {
         // 上次发送距今不足 300ms，说明是 RetryUntilSuccessful 的快速重试，
         // 此时 Action Client 可能还没处理完上一次发送，等待下次 tick
-        ROS_INFO_THROTTLE(1.0, "[SendNav] Debounce: last send was %.1fs ago, skipping this tick",
+        ROS_INFO_THROTTLE(1.0, "\033[33m[SendNav]\033[0m Debounce: last send was %.1fs ago, skipping this tick",
                          (now - last_send_time).toSec());
         return BT::NodeStatus::RUNNING;
     }
@@ -1433,7 +1433,7 @@ BT::NodeStatus SendNavigationGoal::tick()
 
     auto goal = getInput<geometry_msgs::PoseStamped>("goal");
     if (!goal) {
-        ROS_WARN("[SendNav] Failed to get goal input - blackboard key may be missing");
+        ROS_WARN("\033[33m[BT]\033[0m [SendNav] Failed to get goal input - blackboard key may be missing");
         last_send_had_goal_id = false;
         return BT::NodeStatus::FAILURE;
     }
@@ -1481,7 +1481,7 @@ BT::NodeStatus SendNavigationGoal::tick()
     try {
         topic_manager.sendMoveBaseGoal(goal.value(), status, current_id, last_id);
     } catch (const std::runtime_error& e) {
-        ROS_ERROR("[BT] [SendNav] sendMoveBaseGoal failed: %s", e.what());
+        ROS_ERROR("\033[31m[BT]\033[0m [SendNav] sendMoveBaseGoal failed: %s", e.what());
         last_send_had_goal_id = false;
         return BT::NodeStatus::FAILURE;
     }
@@ -1526,7 +1526,7 @@ BT::NodeStatus CancelNavigation::onStart()
         wait_s = 0.5;
     }
 
-    ROS_INFO("[BT] CancelNavigation: cancelled current goal, waiting %.1fs for confirmation", wait_s);
+    ROS_INFO("\033[36m[BT]\033[0m CancelNavigation: cancelled current goal, waiting %.1fs for confirmation", wait_s);
     start_time_ = ros::Time::now();
     wait_duration_.fromSec(wait_s);
     return BT::NodeStatus::RUNNING;
@@ -1535,7 +1535,7 @@ BT::NodeStatus CancelNavigation::onStart()
 BT::NodeStatus CancelNavigation::onRunning()
 {
     if ((ros::Time::now() - start_time_) >= wait_duration_) {
-        ROS_INFO("[BT] CancelNavigation: wait complete, proceeding");
+        ROS_INFO("\033[36m[BT]\033[0m CancelNavigation: wait complete, proceeding");
         cancelled_ = false;
         return BT::NodeStatus::SUCCESS;
     }
@@ -1549,7 +1549,7 @@ BT::NodeStatus WaitForNavigationCancelComplete::onStart()
         timeout_s = 2.0;
     }
 
-    ROS_INFO("[BT] WaitForNavigationCancelComplete: waiting up to %.1fs for cancel confirmation", timeout_s);
+    ROS_INFO("\033[36m[BT]\033[0m WaitForNavigationCancelComplete: waiting up to %.1fs for cancel confirmation", timeout_s);
     start_time_ = ros::Time::now();
     timeout_duration_.fromSec(timeout_s);
     waiting_ = true;
@@ -1562,7 +1562,7 @@ BT::NodeStatus WaitForNavigationCancelComplete::onRunning()
 
     // 优先检查新的取消确认标志（由 action done callback 设置）
     if (gs.isNavCancelConfirmed()) {
-        ROS_INFO("[BT] WaitForNavigationCancelComplete: cancel confirmed via flag");
+        ROS_INFO("\033[36m[BT]\033[0m WaitForNavigationCancelComplete: cancel confirmed via flag");
         waiting_ = false;
         return BT::NodeStatus::SUCCESS;
     }
@@ -1571,7 +1571,7 @@ BT::NodeStatus WaitForNavigationCancelComplete::onRunning()
     if (!gs.isNavigationArrived()) {
         double dist = gs.getDistanceToGoal();
         if (dist >= 999.0) {
-            ROS_INFO("[BT] WaitForNavigationCancelComplete: cancel confirmed (navigation_arrived=false, distance reset)");
+            ROS_INFO("\033[36m[BT]\033[0m WaitForNavigationCancelComplete: cancel confirmed (navigation_arrived=false, distance reset)");
             waiting_ = false;
             return BT::NodeStatus::SUCCESS;
         }
@@ -1579,7 +1579,7 @@ BT::NodeStatus WaitForNavigationCancelComplete::onRunning()
 
     // 检查是否超时
     if ((ros::Time::now() - start_time_) >= timeout_duration_) {
-        ROS_WARN("[BT] WaitForNavigationCancelComplete: timeout after %.1fs, proceeding anyway", timeout_duration_.toSec());
+        ROS_WARN("\033[33m[BT]\033[0m WaitForNavigationCancelComplete: timeout after %.1fs, proceeding anyway", timeout_duration_.toSec());
         waiting_ = false;
         return BT::NodeStatus::SUCCESS;  // 超时也放行，避免卡死
     }
@@ -1593,7 +1593,7 @@ BT::NodeStatus CancelArmBucketAction::tick()
     // For example, by publishing a specific command or calling a service.
     ros::NodeHandle nh;
     nh.setParam("ArmBucketState", 0); // Assuming 0 is a safe/stop state
-    ROS_INFO("BT: Arm/Bucket action cancelled (sent state 0).");
+    ROS_INFO("\033[36m[BT]\033[0m Arm/Bucket action cancelled (sent state 0).");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1602,14 +1602,14 @@ BT::NodeStatus CommitToEndMission::tick()
     config().blackboard->set("mission_ending", true);
     // Consume the external flag to prevent re-triggering
     GlobalState::getInstance().setEndTask(false);
-    ROS_INFO("BT: Mission end committed to blackboard. External flag consumed.");
+    ROS_INFO("\033[36m[BT]\033[0m Mission end committed to blackboard. External flag consumed.");
     return BT::NodeStatus::SUCCESS;
 }
 
 BT::NodeStatus ClearCurrentTask::tick()
 {
     GlobalState::getInstance().clearCurrentTask();
-    ROS_INFO("BT: Current task cleared.");
+    ROS_INFO("\033[36m[BT]\033[0m Current task cleared.");
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1634,7 +1634,7 @@ BT::NodeStatus WaitForNavigationArrival::onStart()
 {
     std::string msg;
     getInput("message", msg);
-    ROS_INFO("[WAIT] %s. Waiting for navigation arrival.", msg.c_str());
+    ROS_INFO("\033[33m[WAIT]\033[0m %s. Waiting for navigation arrival.", msg.c_str());
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1658,7 +1658,7 @@ BT::NodeStatus WaitForNavigationArrival::onRunning()
     std::string msg;
     getInput("message", msg);
     double dist = GlobalState::getInstance().getDistanceToGoal();
-    ROS_INFO_THROTTLE(0.5, "[CheckDist] %s | Current distance: %.2f m", msg.c_str(), dist);
+    ROS_INFO_THROTTLE(0.5, "\033[33m[CheckDist]\033[0m %s | Current distance: %.2f m", msg.c_str(), dist);
 
     return BT::NodeStatus::RUNNING;
 }
@@ -1681,7 +1681,7 @@ BT::NodeStatus GetAndSetCurrentTask::tick()
         // 在真正开始执行该任务时，更新全局参数 /pileID 为当前任务的 bin_id
         ros::param::set("/pileID", static_cast<int>(new_t.bin_id));
         ros::param::set("/hopperID", static_cast<int>(new_t.hopper_id));
-        ROS_INFO("[TASK] Start Task #%d (bin=%d, hopper=%d). Set /pileID=%d",
+        ROS_INFO("\033[32m[TASK]\033[0m Start Task #%d (bin=%d, hopper=%d). Set /pileID=%d",
                  new_t.task_id, new_t.bin_id, new_t.hopper_id, new_t.bin_id);
 
         return BT::NodeStatus::SUCCESS;
@@ -1724,7 +1724,7 @@ BT::NodeStatus WaitForPlanningFeedback::onStart()
         timeout_s_ = 2.0; // Default value if not provided
     }
     start_time_ = ros::Time::now();
-    ROS_INFO("[BT] Waiting for planning feedback... (timeout: %.1fs)", timeout_s_);
+    ROS_INFO("\033[36m[BT]\033[0m Waiting for planning feedback... (timeout: %.1fs)", timeout_s_);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -1734,16 +1734,16 @@ BT::NodeStatus WaitForPlanningFeedback::onRunning()
 
     if (state.hasReceivedPlanningFeedback()) {
         if (state.wasPlanningSuccessful()) {
-            ROS_INFO("[BT] Planning feedback received: SUCCESS.");
+            ROS_INFO("\033[36m[BT]\033[0m Planning feedback received: SUCCESS.");
             return BT::NodeStatus::SUCCESS;
         } else {
-            ROS_ERROR("[BT] Planning feedback received: FAILURE.");
+            ROS_ERROR("\033[31m[BT]\033[0m Planning feedback received: FAILURE.");
             return BT::NodeStatus::FAILURE;
         }
     }
 
     if ((ros::Time::now() - start_time_).toSec() > timeout_s_) {
-        ROS_ERROR("[BT] Timeout waiting for planning feedback after %.1fs.", timeout_s_);
+        ROS_ERROR("\033[31m[BT]\033[0m Timeout waiting for planning feedback after %.1fs.", timeout_s_);
         return BT::NodeStatus::FAILURE;
     }
 
@@ -1769,11 +1769,15 @@ BT::NodeStatus WaitForNavigationResult::onRunning()
     // 持续检查 GlobalState 中的导航到达标志
     // 周期打印导航剩余距离（0.5s 节流）
     double dist = GlobalState::getInstance().getDistanceToGoal();
-    ROS_INFO_THROTTLE(0.5, "[CheckDist] Navigation | Current distance: %.2f m", dist);
+    ROS_INFO_THROTTLE(0.5, "\033[33m[CheckDist]\033[0m Navigation | Current distance: %.2f m", dist);
 
     if (GlobalState::getInstance().isNavigationArrived()) {
-        ROS_INFO("[BT] Navigation result received.");
+        ROS_INFO("\033[36m[BT]\033[0m Navigation result received.");
         auto result = GlobalState::getInstance().getNavigationResult();
+        
+        ROS_INFO("\033[36m[BT]\033[0m NavResult: success=%d, error_code=%u, dist_error=%.2f, angle_error=%.2f, error_msg='%s'",
+                 result.success, result.error_code, result.final_distance_error,
+                 result.final_angle_error, result.error_msg.c_str());
         
         // 将结果写入黑板
         setOutput("success", static_cast<bool>(result.success));
@@ -1812,10 +1816,10 @@ BT::NodeStatus CheckPlanningSuccess::tick()
 {
     bool plan_succeeded = false;
     if (getInput("plan_succeeded", plan_succeeded)) {
-        ROS_INFO("[BT] Planning Success Check: %s", plan_succeeded ? "SUCCESS" : "FAILURE");
+        ROS_INFO("\033[33m[BT]\033[0m Planning Success Check: %s", plan_succeeded ? "SUCCESS" : "FAILURE");
         return plan_succeeded ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
     }
-    ROS_WARN("[BT] Could not get 'plan_succeeded' from blackboard.");
+    ROS_WARN("\033[33m[BT]\033[0m Could not get 'plan_succeeded' from blackboard.");
     return BT::NodeStatus::FAILURE;
 }
 
@@ -1823,7 +1827,7 @@ BT::NodeStatus CheckArrivalQuality::tick()
 {
     double dist_error, angle_error;
     if (!getInput("distance_error", dist_error) || !getInput("angle_error", angle_error)) {
-        ROS_WARN("[BT] Could not get arrival errors from blackboard.");
+        ROS_WARN("\033[33m[BT]\033[0m Could not get arrival errors from blackboard.");
         setOutput("quality_ok", false);
         return BT::NodeStatus::FAILURE;
     }
@@ -1834,7 +1838,7 @@ BT::NodeStatus CheckArrivalQuality::tick()
 
     bool is_ok = (dist_error <= dist_threshold) && (angle_error <= angle_threshold);
 
-    ROS_INFO("[BT] Arrival Quality Check: DistError=%.2f (Th=%.2f), AngleError=%.2f (Th=%.2f) -> %s",
+    ROS_INFO("\033[33m[BT]\033[0m Arrival Quality Check: DistError=%.2f (Th=%.2f), AngleError=%.2f (Th=%.2f) -> %s",
              dist_error, dist_threshold, angle_error, angle_threshold, is_ok ? "OK" : "NOT OK");
 
     setOutput("quality_ok", is_ok);
@@ -1874,7 +1878,7 @@ BT::NodeStatus PublishOverrideRequest::tick()
     msg.data = writer.write(json);
     override_request_pub_.publish(msg);
 
-    ROS_WARN("[BT] Override request published: phase=%s, message=%s", phase.c_str(), message.c_str());
+    ROS_WARN("\033[33m[BT]\033[0m Override request published: phase=%s, message=%s", phase.c_str(), message.c_str());
     return BT::NodeStatus::SUCCESS;
 }
 
@@ -1895,7 +1899,7 @@ BT::NodeStatus RequestManualIntervention::tick()
     // so that the retry navigation has the correct 0->1 transition.
     if (current_status == 1) {
         ROSTopicManager::getInstance().setLastStatus(NavigationStatus::SCOOP);
-        ROS_INFO("[BT] Last navigation status reset to SCOOP for retry.");
+        ROS_INFO("\033[36m[BT]\033[0m Last navigation status reset to SCOOP for retry.");
     }
 
     // 0. 取消当前导航目标，避免在人工介入期间 move_base 仍在尝试规划
@@ -1905,11 +1909,11 @@ BT::NodeStatus RequestManualIntervention::tick()
     std_msgs::UInt8 estop_msg;
     estop_msg.data = 1;
     // estop_pub_.publish(estop_msg);
-    ROS_WARN("[BT] Emergency Stop Published!");
+    ROS_WARN("\033[31m[BT]\033[0m Emergency Stop Published!");
 
     // 2. 设置需要人工介入的全局参数
     ros::param::set("/autonomous_loader/manual_intervention_required", true);
-    ROS_WARN("[BT] Manual intervention required parameter set.");
+    ROS_WARN("\033[33m[BT]\033[0m Manual intervention required parameter set.");
 
     // 3. 发布状态提示信息
     std::string message;
@@ -1920,7 +1924,7 @@ BT::NodeStatus RequestManualIntervention::tick()
     std_msgs::String status_msg;
     status_msg.data = message;
     status_pub_.publish(status_msg);
-    ROS_WARN("[BT] Published status: %s", message.c_str());
+    ROS_WARN("\033[33m[BT]\033[0m Published status: %s", message.c_str());
 
     return BT::NodeStatus::SUCCESS;
 }
@@ -1995,7 +1999,7 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     factory.registerNodeType<WaitForNavigationResult>("WaitForNavigationResult");
     factory.registerNodeType<SetWorkState>("SetWorkState");
 
-    ROS_INFO("Registered all autonomous loader robot behavior tree nodes");
+    ROS_INFO("\033[36m[BT]\033[0m Registered all autonomous loader robot behavior tree nodes");
 }
 
 } // namespace autonomous_loader_bt

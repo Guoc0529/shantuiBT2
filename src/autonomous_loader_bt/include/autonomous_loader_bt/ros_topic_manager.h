@@ -58,11 +58,11 @@ public:
         std::string action_name;
         nh_.param<std::string>("navigate_action_name", action_name, std::string("/navigate"));
         nav_client_.reset(new NavigateClient(action_name, true));
-        ROS_INFO("Waiting for %s action server...", action_name.c_str());
+        ROS_INFO("\033[36m[NAV]\033[0m Waiting for %s action server...", action_name.c_str());
         nav_client_->waitForServer();
-        ROS_INFO("%s action server connected.", action_name.c_str());
+        ROS_INFO("\033[36m[NAV]\033[0m %s action server connected.", action_name.c_str());
 
-        ROS_INFO("ROS Topic Manager initialized.");
+        ROS_INFO("\033[36m[NAV]\033[0m ROS Topic Manager initialized.");
     }
 
     void publishActionStatus(const std::string& message)
@@ -102,7 +102,7 @@ public:
         nav_goal.current_status = static_cast<uint8_t>(status);
         nav_goal.current_id = current_id;
         nav_goal.last_id = last_id;
-        ROS_INFO("[NAV] Sending goal (%.2f, %.2f), status: %d -> %d",
+        ROS_INFO("\033[36m[NAV]\033[0m Sending goal (%.2f, %.2f), status: %d -> %d",
                  goal.pose.position.x, goal.pose.position.y,
                  static_cast<int>(nav_goal.last_status),
                  static_cast<int>(nav_goal.current_status));
@@ -113,7 +113,7 @@ public:
         try {
             nav_client_->cancelAllGoals();
         } catch (const std::exception& e) {
-            ROS_WARN("[NAV] cancelAllGoals threw: %s", e.what());
+            ROS_WARN("\033[33m[NAV]\033[0m cancelAllGoals threw: %s", e.what());
         }
 
         // All actionlib callbacks fire via AsyncSpinner in main thread — safe to call directly
@@ -124,7 +124,7 @@ public:
                            const autonomous_loader_msgs::NavigateResultConstPtr& res)
             {
                 bool was_preempted = (state == actionlib::SimpleClientGoalState::PREEMPTED);
-                ROS_INFO("[NAV] doneCb: state=%s, preempted=%d, has_result=%d",
+                ROS_INFO("\033[36m[NAV]\033[0m doneCb: state=%s, preempted=%d, has_result=%d",
                          state.toString().c_str(), was_preempted, !!res);
 
                 if (was_preempted) {
@@ -139,11 +139,11 @@ public:
                 }
 
                 if (on_result_) on_result_(result);
-                if (on_arrival_) on_arrival_(true);
-
+                // Only set arrival=true when goal actually succeeded
                 if (state == actionlib::SimpleClientGoalState::SUCCEEDED && result.success) {
+                    if (on_arrival_) on_arrival_(true);
                     last_status_ = status;
-                    ROS_INFO("[NAV] Nav goal succeeded, last_status updated to %d",
+                    ROS_INFO("\033[36m[NAV]\033[0m Nav goal succeeded, last_status updated to %d",
                              static_cast<int>(status));
                 }
             },
@@ -160,7 +160,7 @@ public:
             }
         );
 
-        ROS_INFO("[NAV] sendMoveBaseGoal returned (callbacks via AsyncSpinner)");
+        ROS_INFO("\033[36m[NAV]\033[0m sendMoveBaseGoal returned (callbacks via AsyncSpinner)");
     }
 
     bool isNavChildAlive() const { return false; }  // No child process
@@ -205,7 +205,7 @@ public:
         horn_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_Honr", 1, true);
         turn_left_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_TurnLeftLgt", 1, true);
         turn_right_pub_ = nh.advertise<std_msgs::UInt8>("/ACU_TurnRightLgt", 1, true);
-        ROS_INFO("Obstacle control publishers initialized (Horn, Hazard lights)");
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Obstacle control publishers initialized (Horn, Hazard lights)");
     }
 
     void hornOn()
@@ -213,7 +213,7 @@ public:
         std_msgs::UInt8 msg;
         msg.data = 1;
         horn_pub_.publish(msg);
-        ROS_INFO("[OBSTACLE] Horn ON");
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Horn ON");
     }
 
     void hornOff()
@@ -221,7 +221,7 @@ public:
         std_msgs::UInt8 msg;
         msg.data = 0;
         horn_pub_.publish(msg);
-        ROS_INFO("[OBSTACLE] Horn OFF");
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Horn OFF");
     }
 
     void hazardLightsOn()
@@ -230,7 +230,7 @@ public:
         msg.data = 1;
         turn_left_pub_.publish(msg);
         turn_right_pub_.publish(msg);
-        ROS_INFO("[OBSTACLE] Hazard lights ON (left+right blinkers)");
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Hazard lights ON (left+right blinkers)");
     }
 
     void hazardLightsOff()
@@ -239,7 +239,7 @@ public:
         msg.data = 0;
         turn_left_pub_.publish(msg);
         turn_right_pub_.publish(msg);
-        ROS_INFO("[OBSTACLE] Hazard lights OFF");
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Hazard lights OFF");
     }
 
     void publishHazardLights(bool on)
@@ -251,7 +251,7 @@ public:
     {
         goal_publisher_.publish(goal);
         last_goal_ = goal;
-        ROS_INFO("[OBSTACLE] Sending obstacle navigation goal (%.2f, %.2f)",
+        ROS_INFO("\033[36m[OBSTACLE]\033[0m Sending obstacle navigation goal (%.2f, %.2f)",
                  goal.pose.position.x, goal.pose.position.y);
     }
 
