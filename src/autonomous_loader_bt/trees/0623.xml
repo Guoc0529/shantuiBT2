@@ -134,50 +134,14 @@
       结构: ReactiveFallback 实现并行条件检查
 
       ReactiveFallback 策略(优先级从高到低):
-        1. ctrlCmd=3 即时响应 (CheckCtrl3Immediate) - 立即鸣笛双闪
-        2. 遥控接管处理 (SEQ_REMOTE_CONTROL)
-        3. 取消任务 (SEQ_CANCEL_TASK)
-        4. 暂停任务 (SEQ_PAUSE)
-        5. 障碍物避让 (SEQ_OBSTACLE_AVOID)
-        6. 正常作业循环 (MainWorkLoop)
-        7. 空闲待机 (Idle)
+        1. 取消任务 (SEQ_CANCEL_TASK)
+        2. 暂停任务 (SEQ_PAUSE)
+        3. 障碍物避让 (SEQ_OBSTACLE_AVOID)
+        4. 正常作业循环 (MainWorkLoop)
+        5. 空闲待机 (Idle)
     -->
     <BehaviorTree ID="AutonomousLoaderTree">
         <ReactiveFallback name="ROOT">
-
-            <!--
-              ==============================================================
-              ctrlCmd=3 即时响应 (最高优先级)
-              ==============================================================
-              收到 ctrlCmd=3 时立即鸣笛+双闪（不受其他状态影响）
-              注意：此节点会阻塞其他动作执行约2秒
-            -->
-            <!-- <CheckCtrl3Immediate/> -->
-
-            <!--
-              ==============================================================
-              遥控接管处理序列 (RemoteControlHandler)
-              ==============================================================
-              监听 vcu_drive_mode:
-                - 变为2(遥控): 保存快照 + 发急停
-                - 变为1(自动): 检测恢复条件并处理
-              处理策略:
-                - 状态1或8: 直接解除急停
-                - 位置偏差≤0.5m: 直接解除急停
-                - 位置偏差>0.5m: 发送taskID=0取消任务，等待空闲后解除急停
-            -->
-            <Sequence name="SEQ_REMOTE_CONTROL">
-                <VcuDriveModeListener/>
-
-                <!-- 遥控接管时: 保存快照并急停 -->
-                <SaveRemoteControlSnapshot/>
-
-                <!-- 等待退出遥控模式 -->
-                <CheckRemoteControlRecovery/>
-
-                <!-- 恢复处理 -->
-                <RecoverFromRemoteControl timeout="30"/>
-            </Sequence>
 
             <!--
               ==============================================================
@@ -219,70 +183,22 @@
                 <UpdateTaskProgress name="PauseProgress" phase="paused" progress="0.0" message="Task paused"/>
             </Sequence>
 
-<!--
+            <!--
               ==============================================================
-              SEQ_OBSTACLE_AVOID: 障碍物避让与安全待机序列
+              SEQ_OBSTACLE_AVOID: 障碍物避让序列
               ==============================================================
+              触发条件: CheckObstacleTriggered 返回成功
+              执行流程: 鸣笛+双闪 → 设置障碍物目标 → 导航到安全位置 → 等待恢复
+              注意: 此序列会阻塞主循环直到障碍清除
             -->
             <Sequence name="SEQ_OBSTACLE_AVOID">
                 <CheckObstacleTriggered/>
-                <SetWorkState value="5"/>
+                <HornAndHazard/>
                 <SetObstacleTarget/>
-                
-                <Script code="arm_lowered_on_retreat:=false"/>
-
-                <!-- 🌟 核心修复：避障发车前，彻底清空上一次任务残留的里程表和到达标记！ -->
-                <ResetNavigationArrived/>
-                <ResetDistanceToGoal/>
-                <ResetDistanceReduction/>
-
-                <!-- 并行控制组：主执行流与途中安全降臂监控 -->
-                <Parallel name="PARALLEL_OBSTACLE_NAV_AND_SAFE_ARM" success_count="1" failure_count="1">
-                    
-                    <!-- 1. 主执行序列 -->
-                    <Sequence name="SEQ_OBSTACLE_MAIN_FLOW">
-                        <NavigateToObstacle/>
-                        
-                        <SetArmBucketState code="1"/>
-                        <WaitForArmBucketCompletion timeout_s="300" message="Arrived at obstacle point, lowering bucket to ground for safe standby"/>
-                        
-                        <Script code="arm_on_ground:=true"/>
-                        
-                        <WaitForRestore/>
-                        
-                        <HazardLightsOff/>
-                        <ClearRestoreRequested/>
-                        <SetWorkState value="1"/>
-                        <AlwaysSuccess/>
-                    </Sequence>
-
-                    <!-- 2. 途中安全降大臂监控序列 -->
-                    <Sequence name="SEQ_OBSTACLE_ARM_MONITOR_TRANSIT">
-                        <RetryUntilSuccessful num_attempts="-1">
-                            <Fallback>
-                                <Sequence>
-                                    <Sleep msec="100"/>
-                                    <BlackboardCheck key="just_left_hopper" expected="true"/>
-                                    <BlackboardCheck key="arm_lowered_on_retreat" expected="false"/>
-                                    
-                                    <!-- 这里的 9 米现在会从真正的 0 开始重新计算了！ -->
-                                    <CheckDistanceFromLastHopper threshold_name="retract_arm_distance"/>
-                                    
-                                    <SetArmBucketState code="5"/>
-                                    <WaitForArmBucketCompletion timeout_s="300" message="Drove 9m away from hopper during obstacle avoidance, lowering arm safely in transit"/>
-                                    
-                                    <Script code="arm_lowered_on_retreat:=true"/>
-                                    <Script code="just_left_hopper:=false"/>
-                                    <AlwaysFailure/>
-                                </Sequence>
-                                <Sequence>
-                                    <Sleep msec="500"/>
-                                    <AlwaysFailure/>
-                                </Sequence>
-                            </Fallback>
-                        </RetryUntilSuccessful>
-                    </Sequence>
-                </Parallel>
+                <NavigateToObstacle/>
+                <WaitForRestore/>
+                <HazardLightsOff/>
+                <ClearRestoreRequested/>
             </Sequence>
 
             <!--
@@ -311,13 +227,6 @@
                         -->
                         <RetryUntilSuccessful num_attempts="-1" name="WAIT_FOR_COMMAND">
                             <Fallback>
-                                <!-- 如果在空闲状态下发现了待执行的避障/停车指令，立刻将其激活！ -->
-                                <Sequence>
-                                    <CheckObstaclePending/>
-                                    <ActivateObstaclePending/>
-                                    <AlwaysFailure/> <!-- 强制返回失败，让根节点的 ReactiveFallback 瞬间接管去避障 -->
-                                </Sequence>
-
                                 <CheckStartTask name="CheckStartTask"/>
                                 <CheckNewTask name="CheckNewTask"/>
                                 <CheckEndTask name="CheckEndTask"/>
@@ -683,8 +592,14 @@
                                         <!-- 待执行避障：完成当前任务后去避障点 -->
                                         <Sequence name="SEQ_OBSTACLE_AFTER_TASK">
                                             <CheckObstaclePending/>
-                                            <TriggerObstacleAvoidance/>
-                                            <AlwaysFailure/>
+                                            <HornAndHazard/>
+                                            <SetObstacleTarget/>
+                                            <!-- 将 obstacle_pending 转为 obstacle_triggered 表示正在执行 -->
+                                            <ActivateObstaclePending/>
+                                            <NavigateToObstacle/>
+                                            <WaitForRestore/>
+                                            <HazardLightsOff/>
+                                            <ClearRestoreRequested/>
                                         </Sequence>
                                         <!-- 无待执行避障，正常继续 -->
                                         <AlwaysSuccess/>

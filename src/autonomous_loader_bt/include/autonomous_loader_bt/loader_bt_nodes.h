@@ -16,6 +16,8 @@
 #include <map>
 #include <atomic>
 #include <autonomous_loader_msgs/NavigateAction.h>
+#include <std_msgs/UInt8.h>
+#include <shuju/TaskCtrl.h>
 
 namespace autonomous_loader_bt
 {
@@ -167,6 +169,21 @@ public:
     // obstacle_from_ctrl3: 标记是否来自 ctrlCmd=3 触发的避障
     void setObstacleFromCtrl3(bool from_ctrl3);
     bool isObstacleFromCtrl3() const;
+    void setObstacleCtrl3Immediate(bool immediate);
+    bool isObstacleCtrl3Immediate() const;
+    void setObstacleCtrl3Acknowledged(bool ack);
+    bool isObstacleCtrl3Acknowledged() const;
+
+    // ===== 遥控接管相关 API =====
+    void setRemoteControlSnapshot(int work_state, const geometry_msgs::PoseStamped& pose);
+    void clearRemoteControlSnapshot();
+    bool hasRemoteControlSnapshot() const;
+    int getSnapshotWorkState() const;
+    geometry_msgs::PoseStamped getSnapshotPose() const;
+    void setRemoteControlActive(bool active);
+    bool isRemoteControlActive() const;
+    void setRemoteControlRecovering(bool recovering);
+    bool isRemoteControlRecovering() const;
 
 private:
     GlobalState() = default;
@@ -222,6 +239,15 @@ private:
     bool obstacle_triggered_ = false;
     bool obstacle_pending_ = false;  // 收到 ctrlCmd=3，等待任务完成后执行避障
     bool obstacle_from_ctrl3_ = false;  // 标记是否来自 ctrlCmd=3
+    bool obstacle_ctrl3_immediate_ = false;  // ctrlCmd=3 即时响应标志（鸣笛双闪）
+    bool obstacle_ctrl3_acknowledged_ = false;  // ctrlCmd=3 即时响应已执行
+
+    // 遥控接管相关状态
+    bool remote_control_active_ = false;  // 是否处于遥控接管状态
+    bool remote_control_recovering_ = false;  // 是否正在恢复遥控接管
+    bool has_remote_control_snapshot_ = false;  // 是否有遥控接管前的快照
+    int snapshot_work_state_ = 1;  // 遥控接管前的工作状态
+    geometry_msgs::PoseStamped snapshot_pose_;  // 遥控接管前的位置快照
 
     // Current task ID for status reporting
     std::atomic<int> current_task_id_{-1};
@@ -540,6 +566,15 @@ public:
     BT::NodeStatus tick() override;
 };
 
+// 检查 ctrlCmd=3 触发标志并执行即时响应（鸣笛+双闪）
+class CheckCtrl3Immediate : public BT::SyncActionNode
+{
+public:
+    CheckCtrl3Immediate(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
 class HazardLightsOff : public BT::SyncActionNode
 {
 public:
@@ -561,6 +596,15 @@ class ActivateObstaclePending : public BT::SyncActionNode
 {
 public:
     ActivateObstaclePending(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+// 简单设置 obstacle_triggered=true（由 CheckCtrl3Immediate 在任务结束后触发外层导航）
+class TriggerObstacleAvoidance : public BT::SyncActionNode
+{
+public:
+    TriggerObstacleAvoidance(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
     static BT::PortsList providedPorts() { return {}; }
     BT::NodeStatus tick() override;
 };
@@ -936,6 +980,70 @@ public:
     void onHalted() override;
 };
 
+// ========== 遥控接管相关节点 ==========
+
+// 订阅 vcu_drive_mode，检测遥控接管状态
+class VcuDriveModeListener : public BT::SyncActionNode
+{
+public:
+    VcuDriveModeListener(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+private:
+    void driveModeCallback(const std_msgs::UInt8::ConstPtr& msg);
+    ros::NodeHandle nh_;
+    ros::Subscriber vcu_drive_mode_sub_;
+    int current_drive_mode_;
+    ros::Time last_drive_mode_time_;
+};
+
+// 遥控接管时保存快照并发送急停
+class SaveRemoteControlSnapshot : public BT::SyncActionNode
+{
+public:
+    SaveRemoteControlSnapshot(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+private:
+    ros::NodeHandle nh_;
+    ros::Publisher estop_pub_;
+};
+
+// 遥控接管恢复检测
+class CheckRemoteControlRecovery : public BT::ConditionNode
+{
+public:
+    CheckRemoteControlRecovery(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus tick() override;
+};
+
+// 遥控接管恢复动作
+class RecoverFromRemoteControl : public BT::StatefulActionNode
+{
+public:
+    RecoverFromRemoteControl(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts()
+    {
+        return { BT::InputPort<double>("timeout", 30.0, "恢复超时时间（秒）") };
+    }
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+private:
+    ros::NodeHandle nh_;
+    ros::Publisher estop_pub_;
+    ros::Publisher task_ctrl_pub_;
+    ros::Subscriber task_status_sub_;
+    ros::Time start_time_;
+    double timeout_s_ = 30.0;
+    bool position_ok_ = false;
+    bool vehicle_idle_ = false;
+    bool task_canceled_ = false;
+    bool estop_released_ = false;
+
+    void taskStatusCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
+};
 
 // ========== 注册函数 ==========
 void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh);

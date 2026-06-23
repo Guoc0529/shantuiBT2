@@ -10,6 +10,7 @@
 #include <cmath>
 #include <jsoncpp/json/json.h>
 #include <std_msgs/UInt8.h>
+#include <shuju/TaskCtrl.h>
 
 namespace autonomous_loader_bt
 {
@@ -706,6 +707,88 @@ bool GlobalState::isObstacleFromCtrl3() const
     return obstacle_from_ctrl3_;
 }
 
+void GlobalState::setObstacleCtrl3Immediate(bool immediate)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    obstacle_ctrl3_immediate_ = immediate;
+}
+
+bool GlobalState::isObstacleCtrl3Immediate() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return obstacle_ctrl3_immediate_;
+}
+
+void GlobalState::setObstacleCtrl3Acknowledged(bool ack)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    obstacle_ctrl3_acknowledged_ = ack;
+}
+
+bool GlobalState::isObstacleCtrl3Acknowledged() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return obstacle_ctrl3_acknowledged_;
+}
+
+// ===== 遥控接管相关成员函数实现 =====
+
+void GlobalState::setRemoteControlSnapshot(int work_state, const geometry_msgs::PoseStamped& pose)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    snapshot_work_state_ = work_state;
+    snapshot_pose_ = pose;
+    has_remote_control_snapshot_ = true;
+}
+
+void GlobalState::clearRemoteControlSnapshot()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    has_remote_control_snapshot_ = false;
+}
+
+bool GlobalState::hasRemoteControlSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return has_remote_control_snapshot_;
+}
+
+int GlobalState::getSnapshotWorkState() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapshot_work_state_;
+}
+
+geometry_msgs::PoseStamped GlobalState::getSnapshotPose() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapshot_pose_;
+}
+
+void GlobalState::setRemoteControlActive(bool active)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    remote_control_active_ = active;
+}
+
+bool GlobalState::isRemoteControlActive() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return remote_control_active_;
+}
+
+void GlobalState::setRemoteControlRecovering(bool recovering)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    remote_control_recovering_ = recovering;
+}
+
+bool GlobalState::isRemoteControlRecovering() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return remote_control_recovering_;
+}
+
 
 // ========== 条件节点实现 ==========
 
@@ -1011,6 +1094,31 @@ BT::NodeStatus HornAndHazard::tick()
     return BT::NodeStatus::SUCCESS;
 }
 
+BT::NodeStatus CheckCtrl3Immediate::tick()
+{
+    auto& gs = GlobalState::getInstance();
+
+    // 检查是否有未处理的 ctrlCmd=3 即时响应请求
+    if (gs.isObstacleCtrl3Immediate() && !gs.isObstacleCtrl3Acknowledged()) {
+        ROS_WARN("\033[33m[BT]\033[0m CheckCtrl3Immediate: Executing immediate horn + hazard for ctrlCmd=3");
+
+        auto& topic_mgr = ROSTopicManager::getInstance();
+        topic_mgr.hornOn();
+        topic_mgr.hazardLightsOn();
+
+        // 等待2秒
+        ros::Duration(2.0).sleep();
+
+        topic_mgr.hornOff();
+        // 双闪保持亮着，直到收到 ctrlCmd=5
+
+        gs.setObstacleCtrl3Acknowledged(true);
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    return BT::NodeStatus::FAILURE;
+}
+
 BT::NodeStatus HazardLightsOff::tick()
 {
     ROS_INFO("\033[36m[BT]\033[0m HazardLightsOff: Hazard lights OFF");
@@ -1064,6 +1172,16 @@ BT::NodeStatus ActivateObstaclePending::tick()
     return BT::NodeStatus::SUCCESS;
 }
 
+BT::NodeStatus TriggerObstacleAvoidance::tick()
+{
+    auto& gs = GlobalState::getInstance();
+    gs.setObstacleTriggered(true);
+    gs.setObstaclePending(false);
+    gs.setObstacleCtrl3Acknowledged(true);  // 标记即时响应已完成
+    ROS_INFO("\033[36m[BT]\033[0m TriggerObstacleAvoidance: obstacle_triggered=true, pending=false");
+    return BT::NodeStatus::SUCCESS;
+}
+
 BT::NodeStatus NavigateToObstacle::onStart()
 {
     start_time_ = ros::Time::now();
@@ -1099,7 +1217,6 @@ void NavigateToObstacle::onHalted()
 
 BT::NodeStatus WaitForRestore::tick()
 {
-    // 这个条件节点会持续检查，直到restore_requested_为true
     bool requested = GlobalState::getInstance().isRestoreRequested();
 
     if (requested) {
@@ -1108,7 +1225,9 @@ BT::NodeStatus WaitForRestore::tick()
     }
 
     ROS_INFO_THROTTLE(2.0, "\033[36m[BT]\033[0m WaitForRestore: Waiting for restore signal...");
-    return BT::NodeStatus::FAILURE;
+    
+    // 🌟 终极修复：等待时必须返回 RUNNING，让行为树优雅地挂起！
+    return BT::NodeStatus::RUNNING; 
 }
 
 BT::NodeStatus ClearRestoreRequested::tick()
@@ -1931,6 +2050,267 @@ BT::NodeStatus RequestManualIntervention::tick()
     return BT::NodeStatus::SUCCESS;
 }
 
+// ========== 遥控接管相关节点实现 ==========
+
+// 静态成员变量初始化 - 已移除，使用成员变量
+
+VcuDriveModeListener::VcuDriveModeListener(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::SyncActionNode(name, config), nh_("~"), current_drive_mode_(1)
+{
+    vcu_drive_mode_sub_ = nh_.subscribe<std_msgs::UInt8>(
+        "/vcu_drive_mode", 10,
+        boost::bind(&VcuDriveModeListener::driveModeCallback, this, _1));
+    ROS_INFO("\033[36m[BT]\033[0m VcuDriveModeListener subscribed to /vcu_drive_mode");
+}
+
+void VcuDriveModeListener::driveModeCallback(const std_msgs::UInt8::ConstPtr& msg)
+{
+    int drive_mode = msg->data;
+    last_drive_mode_time_ = ros::Time::now();
+
+    bool was_active = GlobalState::getInstance().isRemoteControlActive();
+    bool now_active = (drive_mode == 2);  // 2=遥控模式
+
+    if (now_active && !was_active) {
+        // 进入遥控模式
+        ROS_WARN("\033[31m[BT]\033[0m === Remote control ACTIVATED (drive_mode=%d) ===", drive_mode);
+        current_drive_mode_ = drive_mode;
+        GlobalState::getInstance().setRemoteControlActive(true);
+    } else if (!now_active && was_active) {
+        // 退出遥控模式
+        ROS_WARN("\033[32m[BT]\033[0m === Remote control DEACTIVATED (drive_mode=%d) ===", drive_mode);
+        current_drive_mode_ = drive_mode;
+        GlobalState::getInstance().setRemoteControlActive(false);
+        GlobalState::getInstance().setRemoteControlRecovering(true);
+    } else {
+        current_drive_mode_ = drive_mode;
+    }
+}
+
+BT::NodeStatus VcuDriveModeListener::tick()
+{
+    // 每tick一次就检查一次驾驶模式，已经在回调中处理状态变化
+    // 这里只需要确认回调已初始化
+    if (vcu_drive_mode_sub_.getNumPublishers() == 0) {
+        ROS_WARN_THROTTLE(5.0, "\033[33m[BT]\033[0m VcuDriveModeListener: no publishers on /vcu_drive_mode");
+        return BT::NodeStatus::FAILURE;
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+// ========== 遥控接管保存快照节点 ==========
+
+SaveRemoteControlSnapshot::SaveRemoteControlSnapshot(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::SyncActionNode(name, config), nh_("~")
+{
+    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
+}
+
+BT::NodeStatus SaveRemoteControlSnapshot::tick()
+{
+    auto& gs = GlobalState::getInstance();
+
+    if (!gs.isRemoteControlActive()) {
+        // 不是遥控模式，跳过
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // 保存当前工作状态和位置快照
+    int current_work_state = gs.getWorkState();
+    geometry_msgs::PoseStamped current_pose = gs.getCurrentPose();
+
+    gs.setRemoteControlSnapshot(current_work_state, current_pose);
+
+    ROS_WARN("\033[31m[BT]\033[0m === Remote control SNAPSHOT saved: state=%d, pos=(%.2f, %.2f) ===",
+             current_work_state, current_pose.pose.position.x, current_pose.pose.position.y);
+
+    // 发送急停指令
+    std_msgs::UInt8 estop_msg;
+    estop_msg.data = 1;  // 1=急停
+    estop_pub_.publish(estop_msg);
+    ROS_WARN("\033[31m[BT]\033[0m === Emergency Stop SENT ===");
+
+    return BT::NodeStatus::SUCCESS;
+}
+
+// ========== 遥控接管恢复检测节点 ==========
+
+CheckRemoteControlRecovery::CheckRemoteControlRecovery(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::ConditionNode(name, config)
+{
+}
+
+BT::NodeStatus CheckRemoteControlRecovery::tick()
+{
+    auto& gs = GlobalState::getInstance();
+
+    if (!gs.isRemoteControlRecovering()) {
+        // 没有待恢复的遥控接管
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // 检查是否有快照
+    if (!gs.hasRemoteControlSnapshot()) {
+        ROS_WARN("\033[33m[BT]\033[0m Remote control recovering but no snapshot available");
+        gs.setRemoteControlRecovering(false);
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // 切换到自动模式了，可以恢复
+    if (!gs.isRemoteControlActive()) {
+        ROS_INFO("\033[36m[BT]\033[0m Remote control recovery triggered");
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    return BT::NodeStatus::FAILURE;
+}
+
+// ========== 遥控接管恢复动作节点 ==========
+
+void RecoverFromRemoteControl::taskStatusCallback(const std_msgs::Int32MultiArray::ConstPtr& msg)
+{
+    if (msg->data.size() < 1) return;
+
+    int vehicle_state = msg->data[0];
+    // 状态 1=空闲 表示车已经停止
+    if (vehicle_state == 1) {
+        vehicle_idle_ = true;
+        ROS_INFO("\033[36m[BT]\033[0m Vehicle is IDLE (state=%d)", vehicle_state);
+    }
+}
+
+RecoverFromRemoteControl::RecoverFromRemoteControl(const std::string& name, const BT::NodeConfiguration& config)
+    : BT::StatefulActionNode(name, config), nh_("~")
+{
+    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
+    task_ctrl_pub_ = nh_.advertise<shuju::TaskCtrl>("/task_ctrl", 1, true);
+    task_status_sub_ = nh_.subscribe("/vehicle/task_status", 1, &RecoverFromRemoteControl::taskStatusCallback, this);
+}
+
+BT::NodeStatus RecoverFromRemoteControl::onStart()
+{
+    auto& gs = GlobalState::getInstance();
+
+    // 获取配置参数
+    if (!getInput("timeout", timeout_s_)) {
+        timeout_s_ = 30.0;
+    }
+
+    start_time_ = ros::Time::now();
+    position_ok_ = false;
+    vehicle_idle_ = false;
+    task_canceled_ = false;
+    estop_released_ = false;
+
+    if (!gs.hasRemoteControlSnapshot()) {
+        ROS_ERROR("\033[31m[BT]\033[0m No remote control snapshot available!");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    int snapshot_state = gs.getSnapshotWorkState();
+    geometry_msgs::PoseStamped snapshot_pose = gs.getSnapshotPose();
+    geometry_msgs::PoseStamped current_pose = gs.getCurrentPose();
+
+    double dx = current_pose.pose.position.x - snapshot_pose.pose.position.x;
+    double dy = current_pose.pose.position.y - snapshot_pose.pose.position.y;
+    double position_diff = std::sqrt(dx * dx + dy * dy);
+
+    ROS_WARN("\033[36m[BT]\033[0m === Remote Control Recovery START ===");
+    ROS_WARN("\033[36m[BT]\033[0m Snapshot state: %d, Current state: %d", snapshot_state, gs.getWorkState());
+    ROS_WARN("\033[36m[BT]\033[0m Position diff: %.2f m", position_diff);
+
+    // 情况1: 状态是1(空闲)或8(已结束) - 直接解除急停
+    if (snapshot_state == 1 || snapshot_state == 8) {
+        ROS_INFO("\033[36m[BT]\033[0m Snapshot state is IDLE/ENDED, releasing estop directly");
+
+        // 解除急停
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;  // 0=解除
+        estop_pub_.publish(estop_msg);
+        estop_released_ = true;
+
+        gs.setRemoteControlRecovering(false);
+        gs.clearRemoteControlSnapshot();
+
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    // 情况2: 位置偏差 <= 0.5m - 直接解除急停
+    if (position_diff <= 0.5) {
+        ROS_INFO("\033[36m[BT]\033[0m Position diff <= 0.5m, releasing estop directly");
+
+        // 解除急停
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;  // 0=解除
+        estop_pub_.publish(estop_msg);
+        estop_released_ = true;
+
+        gs.setRemoteControlRecovering(false);
+        gs.clearRemoteControlSnapshot();
+
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    // 情况3: 位置偏差 > 0.5m - 发送 taskID=0 取消任务
+    ROS_WARN("\033[33m[BT]\033[0m Position diff > 0.5m, sending taskID=0 to cancel task");
+
+    shuju::TaskCtrl task_ctrl_msg;
+    task_ctrl_msg.taskID = 0;       // taskID=0 表示取消
+    task_ctrl_msg.ctrlCmd = 0;      // 默认值
+    task_ctrl_msg.timestamp = ros::Time::now().toSec();
+    task_ctrl_pub_.publish(task_ctrl_msg);
+
+    task_canceled_ = true;
+
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus RecoverFromRemoteControl::onRunning()
+{
+    // 检查超时
+    ros::Duration elapsed = ros::Time::now() - start_time_;
+    if (elapsed.toSec() > timeout_s_) {
+        ROS_ERROR("\033[31m[BT]\033[0m Remote control recovery TIMEOUT!");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // 如果还没取消任务，继续等待
+    if (!task_canceled_) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    // 如果任务已取消，等待车辆空闲
+    if (!vehicle_idle_) {
+        ROS_INFO_THROTTLE(2.0, "\033[33m[BT]\033[0m Waiting for vehicle to become idle...");
+        return BT::NodeStatus::RUNNING;
+    }
+
+    // 车辆空闲了，解除急停
+    if (!estop_released_) {
+        ROS_WARN("\033[36m[BT]\033[0m Vehicle is idle, releasing estop");
+
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 0;  // 0=解除
+        estop_pub_.publish(estop_msg);
+        estop_released_ = true;
+
+        GlobalState::getInstance().setRemoteControlRecovering(false);
+        GlobalState::getInstance().clearRemoteControlSnapshot();
+
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    return BT::NodeStatus::SUCCESS;
+}
+
+void RecoverFromRemoteControl::onHalted()
+{
+    ROS_WARN("\033[33m[BT]\033[0m RecoverFromRemoteControl halted");
+    vehicle_idle_ = false;
+    task_canceled_ = false;
+    estop_released_ = false;
+}
+
 void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
 {
     // Conditions
@@ -1960,9 +2340,11 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     factory.registerNodeType<CheckRestoreRequested>("CheckRestoreRequested");
     factory.registerNodeType<CheckObstaclePending>("CheckObstaclePending");
     factory.registerNodeType<HornAndHazard>("HornAndHazard");
+    factory.registerNodeType<CheckCtrl3Immediate>("CheckCtrl3Immediate");
     factory.registerNodeType<HazardLightsOff>("HazardLightsOff");
     factory.registerNodeType<SetObstacleTarget>("SetObstacleTarget");
     factory.registerNodeType<ActivateObstaclePending>("ActivateObstaclePending");
+    factory.registerNodeType<TriggerObstacleAvoidance>("TriggerObstacleAvoidance");
     factory.registerNodeType<NavigateToObstacle>("NavigateToObstacle");
     factory.registerNodeType<WaitForRestore>("WaitForRestore");
     factory.registerNodeType<ClearRestoreRequested>("ClearRestoreRequested");
@@ -2000,6 +2382,12 @@ void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)
     factory.registerNodeType<PublishOverrideRequest>("PublishOverrideRequest");
     factory.registerNodeType<WaitForNavigationResult>("WaitForNavigationResult");
     factory.registerNodeType<SetWorkState>("SetWorkState");
+
+    // 遥控接管相关
+    factory.registerNodeType<VcuDriveModeListener>("VcuDriveModeListener");
+    factory.registerNodeType<SaveRemoteControlSnapshot>("SaveRemoteControlSnapshot");
+    factory.registerNodeType<CheckRemoteControlRecovery>("CheckRemoteControlRecovery");
+    factory.registerNodeType<RecoverFromRemoteControl>("RecoverFromRemoteControl");
 
     ROS_INFO("\033[36m[BT]\033[0m Registered all autonomous loader robot behavior tree nodes");
 }
