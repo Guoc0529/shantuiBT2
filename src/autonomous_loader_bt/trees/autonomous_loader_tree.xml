@@ -58,95 +58,71 @@
     -->
     <BehaviorTree ID="SafeNavigate">
         <Sequence>
-            <!-- 重试直到成功(无限重试) -->
-            <RetryUntilSuccessful num_attempts="-1">
+
+            <!-- Step 1: 重置所有状态标志 -->
+            <Sequence>
+                <ResetNavigationArrived/>
+                <ResetDistanceToGoal/>
+                <ResetDistanceReduction/>
+                <ResetPlanningFeedback/>
+            </Sequence>
+
+            <!-- Step 2: 发送导航目标并等待结果 -->
+            <Sequence>
+                <!-- 发送导航目标(只发送一次) -->
+                <SendNavigationGoal goal="{goal}" status="{status}"/>
+                <!-- 等待导航结果 -->
+                <WaitForNavigationResult
+                    success="{success}"
+                    final_distance_error="{dist_error}"
+                    final_angle_error="{angle_error}"
+                    error_code="{error_code}"
+                    error_msg="{error_msg}"/>
+            </Sequence>
+
+            <!-- Step 3: 错误码检查与处理 -->
+            <Fallback>
+                <!-- 成功则继续 -->
+                <BlackboardCheck key="success" expected="true"/>
+                <!-- 检查是否为可恢复错误 -->
                 <Sequence>
-
-                    <!-- Step 1: 重置所有状态标志 -->
-                    <Sequence>
-                        <ResetNavigationArrived/>
-                        <ResetDistanceToGoal/>
-                        <ResetDistanceReduction/>
-                        <ResetPlanningFeedback/>
-                    </Sequence>
-
-                    <!-- Step 2: 路径规划与导航执行 -->
-                    <Fallback>
-                        <!-- 并行执行: 等待规划反馈 + 发送导航目标 -->
-                        <Parallel success_count="2" failure_count="1">
-                            <Sequence>
-                                <!-- 等待路径规划反馈 -->
-                                <WaitForPlanningFeedback timeout="300"/>
-                                <!-- 等待导航结果 -->
-                                <WaitForNavigationResult
-                                    success="{success}"
-                                    final_distance_error="{dist_error}"
-                                    final_angle_error="{angle_error}"
-                                    error_code="{error_code}"
-                                    error_msg="{error_msg}"/>
-                            </Sequence>
-                            <Sequence>
-                                <!-- 50ms间隔发送导航目标 -->
-                                <Sleep msec="50"/>
-                                <SendNavigationGoal goal="{goal}" status="{status}"/>
-                            </Sequence>
-                        </Parallel>
-
-                        <!-- 路径规划失败处理 -->
-                        <Sequence>
-                            <SetWorkState value="6"/>
-                            <SubTree ID="ManualOverride"
-                                     phase="Navigation"
-                                     message="Path planning failed. Please move the vehicle manually to a suitable position and click complete."
-                                     override_timeout="600"/>
-                        </Sequence>
-                    </Fallback>
-
-                    <!-- Step 3: 错误码检查与处理 -->
-                    <Fallback>
-                        <!-- 成功则继续 -->
-                        <BlackboardCheck key="success" expected="true"/>
-                        <!-- 检查是否为可恢复错误 -->
-                        <Sequence>
-                            <CheckErrorCode error_code="{error_code}" recoverable_codes="102,103,104"/>
-                            <AlwaysFailure/>
-                        </Sequence>
-                        <!-- 不可恢复错误: 请求人工干预 -->
-                        <Sequence>
-                            <SetWorkState value="6"/>
-                            <RequestManualIntervention message="{error_msg}"/>
-                            <Fallback>
-                                <WaitForManualIntervention/>
-                                <Sequence>
-                                    <CheckEndTask/>
-                                    <AlwaysFailure/>
-                                </Sequence>
-                            </Fallback>
-                            <AlwaysFailure/>
-                        </Sequence>
-                    </Fallback>
-
-                    <!-- Step 4: 到达质量验证 -->
-                    <Fallback>
-                        <!-- 检查导航状态是否为预期的状态 -->
-                        <Inverter>
-                            <CheckNavStatus status="{status}" expected="1"/>
-                        </Inverter>
-                        <!-- 到达质量检查 -->
-                        <Fallback>
-                            <CheckArrivalQuality distance_error="{dist_error}" angle_error="{angle_error}"/>
-                            <!-- 到达质量差: 请求人工干预 -->
-                            <Sequence>
-                                <SetWorkState value="6"/>
-                                <RequestManualIntervention message="Dumping arrival quality is poor. Please intervene."/>
-                                <Fallback>
-                                    <WaitForManualIntervention/>
-                                </Fallback>
-                            </Sequence>
-                        </Fallback>
-                    </Fallback>
+                    <CheckErrorCode error_code="{error_code}" recoverable_codes="102,103,104"/>
+                    <AlwaysFailure/>
                 </Sequence>
-            </RetryUntilSuccessful>
+                <!-- 不可恢复错误: 请求人工干预 -->
+                <Sequence>
+                    <!-- <SetWorkState value="6"/> -->
+                    <RequestManualIntervention message="{error_msg}"/>
+                    <Fallback>
+                        <WaitForManualIntervention/>
+                        <Sequence>
+                            <CheckEndTask/>
+                            <AlwaysFailure/>
+                        </Sequence>
+                    </Fallback>
+                    <AlwaysFailure/>
+                </Sequence>
+            </Fallback>
+
+            <!-- Step 4: 到达质量验证 -->
+            <Fallback>
+                <!-- 检查导航状态是否为预期的状态 -->
+                <Inverter>
+                    <CheckNavStatus status="{status}" expected="1"/>
+                </Inverter>
+                <!-- 到达质量检查 -->
+                <Fallback>
+                    <CheckArrivalQuality distance_error="{dist_error}" angle_error="{angle_error}"/>
+                    <!-- 到达质量差: 请求人工干预 -->
+                    <Sequence>
+                        <!-- <SetWorkState value="6"/> -->
+                        <RequestManualIntervention message="Dumping arrival quality is poor. Please intervene."/>
+                        <Fallback>
+                            <WaitForManualIntervention/>
+                        </Fallback>
+                    </Sequence>
+                </Fallback>
+            </Fallback>
         </Sequence>
     </BehaviorTree>
 
@@ -437,7 +413,7 @@
                                             <!-- 规划失败则请求人工干预 -->
                                             <RetryUntilSuccessful num_attempts="-1">
                                                 <Sequence>
-                                                    <SetWorkState value="6"/>
+                                                    <!-- <SetWorkState value="6"/> -->
                                                     <RequestManualIntervention message="Planning to scoop failed, please intervene"/>
                                                     <WaitForManualIntervention/>
                                                     <ResetPlanningFeedback/>

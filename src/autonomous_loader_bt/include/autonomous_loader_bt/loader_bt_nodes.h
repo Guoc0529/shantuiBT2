@@ -90,6 +90,8 @@ public:
     void setEndTask(bool end);
     void setCancelTask(bool cancel);
     void setStartTask(bool start);
+    void setFirstTaskWaitingCtrlcmd(bool waiting);
+    bool isFirstTaskWaitingCtrlcmd() const;
     void setEmergencyStop(bool stop);
     void setIsEnding(bool ending);
     void setHaltRequested(bool halt);
@@ -209,6 +211,9 @@ private:
 
     // Work state (2=auto working, 3=temp working)
     int work_state_ = 2;  // default to auto working
+
+    // 第一个任务等待 ctrlCmd=1 标志
+    bool first_task_waiting_ctrlcmd_ = true;  // true=第一个任务需要等待 ctrlCmd=1
 
     // 避障相关状态
     int obstacle_type_ = 0;  // 0=无, 1=obstacle_1, 2=obstacle_2, 3=backstart

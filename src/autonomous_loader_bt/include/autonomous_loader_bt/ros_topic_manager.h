@@ -109,13 +109,6 @@ public:
 
         if (on_arrival_) on_arrival_(false);
 
-        // Cancel any previous goals first
-        try {
-            nav_client_->cancelAllGoals();
-        } catch (const std::exception& e) {
-            ROS_WARN("\033[33m[NAV]\033[0m cancelAllGoals threw: %s", e.what());
-        }
-
         // All actionlib callbacks fire via AsyncSpinner in main thread — safe to call directly
         nav_client_->sendGoal(
             nav_goal,

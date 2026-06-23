@@ -349,6 +349,18 @@ void GlobalState::setStartTask(bool start)
     start_task_ = start;
 }
 
+void GlobalState::setFirstTaskWaitingCtrlcmd(bool waiting)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    first_task_waiting_ctrlcmd_ = waiting;
+}
+
+bool GlobalState::isFirstTaskWaitingCtrlcmd() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return first_task_waiting_ctrlcmd_;
+}
+
 void GlobalState::setEmergencyStop(bool stop)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -785,7 +797,15 @@ BT::NodeStatus CheckEndTaskAfterCycle::tick()
 
 BT::NodeStatus CheckNewTask::tick()
 {
-    bool has_task = GlobalState::getInstance().hasNewTask();
+    auto& state = GlobalState::getInstance();
+
+    // 如果第一个任务正在等待 ctrlCmd=1，则不认为有新任务
+    if (state.isFirstTaskWaitingCtrlcmd()) {
+        ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckNewTask: first task waiting for ctrlCmd=1, returning FAILURE");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    bool has_task = state.hasNewTask();
     ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckNewTask: hasNewTask=%d", has_task);
     return has_task ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
@@ -1119,15 +1139,15 @@ BT::NodeStatus SetArmBucketState::tick()
     // 发布动作状态（英文，用于topic发布）
     std::string status_msg;
     switch(code) {
-        case 1: status_msg = "1: Bucket Shaping"; break;
-        case 2: status_msg = "2: Bucket to Transit"; break;
-        case 3: status_msg = "3: Bucket Leveling"; break;
-        case 4: status_msg = "4: Arm Raising"; break;
-        case 5: status_msg = "5: Arm Lowering"; break;
-        case 6: status_msg = "6: Dumping"; break;
-        case 7: status_msg = "7: Scooping"; break;
-        case 8: status_msg = "8: Material Dumping"; break;
-        default: status_msg = "Arm/Bucket Action"; break;
+        case 1: status_msg = "1: 铲斗整形"; break;
+        case 2: status_msg = "2: 铲斗运输姿态"; break;
+        case 3: status_msg = "3: 铲斗找平"; break;
+        case 4: status_msg = "4: 机械臂抬起"; break;
+        case 5: status_msg = "5: 机械臂放下"; break;
+        case 6: status_msg = "6: 卸料中"; break;
+        case 7: status_msg = "7: 铲装中"; break;
+        case 8: status_msg = "8: 卸料中"; break;
+        default: status_msg = "机械臂/铲斗动作"; break;
     }
     ROSTopicManager::getInstance().publishActionStatus(status_msg);
     
@@ -1286,15 +1306,15 @@ BT::NodeStatus WaitForArmBucketCompletion::onRunning()
             int code = GlobalState::getInstance().getArmBucketCode();
             std::string status_msg;
             switch(code) {
-                case 1: status_msg = "1: Bucket lowered to ground"; break;
-                case 2: status_msg = "2: Bucket lifted to transit"; break;
-                case 3: status_msg = "3: Bucket leveled"; break;
-                case 4: status_msg = "4: Arm raised"; break;
-                case 5: status_msg = "5: Arm lowered"; break;
-                case 6: status_msg = "6: Dumping completed"; break;
-                case 7: status_msg = "7: Scooping completed"; break;
-                case 8: status_msg = "8: Material dumping done"; break;
-                default: status_msg = "0: Arm/Bucket operation done"; break;
+                case 1: status_msg = "1: 铲斗已放至地面"; break;
+                case 2: status_msg = "2: 铲斗已抬至运输姿态"; break;
+                case 3: status_msg = "3: 铲斗已找平"; break;
+                case 4: status_msg = "4: 机械臂已抬起"; break;
+                case 5: status_msg = "5: 机械臂已放下"; break;
+                case 6: status_msg = "6: 卸料完成"; break;
+                case 7: status_msg = "7: 铲装完成"; break;
+                case 8: status_msg = "8: 物料倾倒完成"; break;
+                default: status_msg = "0: 机械臂/铲斗操作完成"; break;
             }
             ROSTopicManager::getInstance().publishActionStatus(status_msg);
             
@@ -1363,7 +1383,7 @@ BT::NodeStatus WaitForPointAccumulationDone::onRunning()
     if (nh.getParam("PointAccumulation", value)) {
         if (value == 10) {
             ROS_INFO("\033[32m[DONE]\033[0m Point accumulation completed. PointAccumulation reached 10");
-            ROSTopicManager::getInstance().publishActionStatus("Point cloud accumulation completed");
+            ROSTopicManager::getInstance().publishActionStatus("点云累积完成");
             return BT::NodeStatus::SUCCESS;
         }
         if (value < 0) { return BT::NodeStatus::FAILURE; }
@@ -1416,25 +1436,9 @@ BT::NodeStatus SetGoalToBinCenter::tick()
 
 BT::NodeStatus SendNavigationGoal::tick()
 {
-    // ========== 防重入保护：防止 RetryUntilSuccessful 快速重试时重复发送 ==========
-    static ros::Time last_send_time;
-    static bool last_send_had_goal_id = false;
-    ros::Time now = ros::Time::now();
-    if (last_send_had_goal_id && (now - last_send_time).toSec() < 0.3) {
-        // 上次发送距今不足 300ms，说明是 RetryUntilSuccessful 的快速重试，
-        // 此时 Action Client 可能还没处理完上一次发送，等待下次 tick
-        ROS_INFO_THROTTLE(1.0, "\033[33m[SendNav]\033[0m Debounce: last send was %.1fs ago, skipping this tick",
-                         (now - last_send_time).toSec());
-        return BT::NodeStatus::RUNNING;
-    }
-    last_send_time = now;
-    last_send_had_goal_id = true;
-    // =======================================================================
-
     auto goal = getInput<geometry_msgs::PoseStamped>("goal");
     if (!goal) {
         ROS_WARN("\033[33m[BT]\033[0m [SendNav] Failed to get goal input - blackboard key may be missing");
-        last_send_had_goal_id = false;
         return BT::NodeStatus::FAILURE;
     }
 
@@ -1477,17 +1481,15 @@ BT::NodeStatus SendNavigationGoal::tick()
     gs.setNavCancelConfirmed(false);
     topic_manager.resetNavCancelConfirmed();
 
-    // ========== 安全加固：在发送前确认 Action Client 状态 ==========
+    // Send navigation goal
     try {
         topic_manager.sendMoveBaseGoal(goal.value(), status, current_id, last_id);
     } catch (const std::runtime_error& e) {
         ROS_ERROR("\033[31m[BT]\033[0m [SendNav] sendMoveBaseGoal failed: %s", e.what());
-        last_send_had_goal_id = false;
         return BT::NodeStatus::FAILURE;
     }
-    // =====================================================================
 
-    topic_manager.publishActionStatus("Navigation in progress");
+    topic_manager.publishActionStatus("导航进行中");
 
     return BT::NodeStatus::SUCCESS;
 }
@@ -1788,7 +1790,7 @@ BT::NodeStatus WaitForNavigationResult::onRunning()
         
         // 导航成功时发送"导航到达"消息
         if (result.success) {
-            ROSTopicManager::getInstance().publishActionStatus("Navigation arrived");
+            ROSTopicManager::getInstance().publishActionStatus("导航到达");
         }
         
         return BT::NodeStatus::SUCCESS;
