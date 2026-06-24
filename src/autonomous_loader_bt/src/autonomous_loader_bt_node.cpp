@@ -473,7 +473,7 @@ private:
                     }).detach();
 
                     // 🌟 3. 彻底废弃由行为树处理即时报警的标志，防止打断 Fallback
-                    // gs.setObstacleCtrl3Immediate(true);   <-- 删除这行
+                    // gs.setObstacleCtrl3Immediate(true);   <-- 删除这行 
                     // gs.setObstacleCtrl3Acknowledged(false); <-- 删除这行
 
                     // 4. 设置工作状态为5

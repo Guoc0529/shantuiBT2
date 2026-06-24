@@ -1035,20 +1035,25 @@ BT::NodeStatus SetWorkState::tick()
 {
     int value;
     if (!getInput("value", value)) {
-        // No value provided, use GlobalState work_state
         value = GlobalState::getInstance().getWorkState();
-        ROS_INFO("\033[36m[BT]\033[0m SetWorkState: using GlobalState work_state=%d", value);
+        // ROS_INFO("[BT] SetWorkState: using GlobalState work_state=%d", value);
     }
+
+    // 🌟 核心拦截状态锁：只要是避障待办(Pending)或执行中(Triggered)
+    // 无论XML怎么配置，强行把状态锁定覆盖为 5！
+    if (GlobalState::getInstance().isObstaclePending() || GlobalState::getInstance().isObstacleTriggered()) {
+        value = 5;
+    }
+
     ros::param::set("/workstate", value);
 
-    // 调用状态上报模块
     int task_id_int = autonomous_loader_bt::GlobalState::getInstance().getTaskIdInt();
     autonomous_loader_bt::TaskStatusReporter::instance().setState(value);
     if (task_id_int > 0) {
         autonomous_loader_bt::TaskStatusReporter::instance().setTaskId(task_id_int);
     }
 
-        ROS_INFO("\033[36m[BT]\033[0m Set /workstate to %d", value);
+    ROS_INFO("[BT] Set /workstate to %d", value);
     return BT::NodeStatus::SUCCESS;
 }
 
