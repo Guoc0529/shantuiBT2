@@ -11,11 +11,13 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <cmath>
+#include <boost/bind.hpp>
+#include <boost/function.hpp>
 #include "autonomous_loader_msgs/TaskCommand.h"
 #include "autonomous_loader_bt/loader_bt_nodes.h"
 #include "autonomous_loader_bt/ros_topic_manager.h"
 #include "shuju/cangdou.h"
-#include "shuju/TaskCtrl.h"
+#include "shuju/taskcontrol.h"
 #include <stdexcept> // 用于 std::runtime_error
 
 using namespace autonomous_loader_bt;
@@ -218,9 +220,9 @@ private:
         pause_task_sub_ = nh_.subscribe("scheduler/pause_task", 10, &AutonomousLoaderBTNode::pauseTaskCallback, this);
         end_task_sub_ = nh_.subscribe("scheduler/end_task", 10, &AutonomousLoaderBTNode::endTaskCallback, this);
 
-        // TaskCtrl 话题订阅 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
-        taskctrl_sub_ = nh_.subscribe("/task_ctrl_command", 10, &AutonomousLoaderBTNode::taskCtrlCallback, this);
-        ROS_INFO("\033[36m[BT]\033[0m Subscribed to /task_ctrl_command for task control commands");
+        // TaskCtrl 服务 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
+        task_ctrl_service_ = nh_.advertiseService("/task_control_srv", &AutonomousLoaderBTNode::taskCtrlServiceCallback, this);
+        ROS_INFO("\033[36m[BT]\033[0m Advertised service /task_control_srv for task control commands");
 
         // 避障相关话题订阅
         obstacle_1_sub_ = nh_.subscribe("/obstacle_1", 10, &AutonomousLoaderBTNode::obstacle1Callback, this);
@@ -417,18 +419,18 @@ private:
         ROS_INFO("\033[36m[BT]\033[0m Received end task command: %s", msg->data ? "yes" : "no");
     }
 
-    void taskCtrlCallback(const shuju::TaskCtrl::ConstPtr& msg)
+    bool taskCtrlServiceCallback(shuju::taskcontrol::Request& req, shuju::taskcontrol::Response& res)
     {
-        ROS_INFO("\033[33m[TaskCtrl]\033[0m Received: taskID=%d, ctrlCmd=%d, timestamp=%.1f",
-                 msg->taskID, msg->ctrlCmd, msg->timestamp);
+        ROS_INFO("\033[33m[TaskCtrl]\033[0m Received: taskID=%d, ctrlCmd=%d",
+                 req.taskID, req.ctrlCmd);
 
         auto& gs = autonomous_loader_bt::GlobalState::getInstance();
 
-        switch (msg->ctrlCmd) {
+        switch (req.ctrlCmd) {
             case 1:  // 开始任务
                 gs.setStartTask(true);
-                // 清除第一个任务等待标志，后续任务自动执行
                 gs.setFirstTaskWaitingCtrlcmd(false);
+                res.taskCtrlSuccess = true;
                 ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=1: Start task flag set, first task wait cleared");
                 break;
 
@@ -436,50 +438,42 @@ private:
                 gs.setPauseTask(true);
                 gs.setHaltRequested(true);
                 TaskStatusReporter::instance().setState(TaskStatusReporter::REMOTE_CONTROL);
+                res.taskCtrlSuccess = true;
                 ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=2: Remote takeover - halt BT, set state=6");
                 break;
 
-            case 3:  // 避障停车（带坐标）- 先完成当前任务，再去避障点
+            case 3:  // 避障停车（带坐标）
                 {
                     geometry_msgs::PoseStamped obstacle_target;
                     obstacle_target.header.stamp = ros::Time::now();
                     obstacle_target.header.frame_id = "map";
-                    obstacle_target.pose.position.x = msg->target_x;
-                    obstacle_target.pose.position.y = msg->target_y;
+                    obstacle_target.pose.position.x = req.target_x;
+                    obstacle_target.pose.position.y = req.target_y;
                     obstacle_target.pose.position.z = 0.0;
-                    
-                    // Convert yaw to quaternion
-                    double cy = cos(msg->target_yaw * 0.5);
-                    double sy = sin(msg->target_yaw * 0.5);
+
+                    double cy = cos(req.target_yaw * 0.5);
+                    double sy = sin(req.target_yaw * 0.5);
                     obstacle_target.pose.orientation.w = cy;
                     obstacle_target.pose.orientation.x = 0;
                     obstacle_target.pose.orientation.y = 0;
                     obstacle_target.pose.orientation.z = sy;
 
-                    // 1. 保存避障目标，不立即触发，等待当前任务完成
                     gs.setObstacleTarget(obstacle_target);
-                    gs.setObstacleType(0);        // 0表示从TaskCtrl来的坐标
-                    gs.setObstaclePending(true);  // 标记为待执行避障
-                    // gs.setObstacleFromCtrl3(true);  // 视您的其他逻辑保留
+                    gs.setObstacleType(0);
+                    gs.setObstaclePending(true);
 
-                    // 🌟 2. 核心修改：直接异步触发声光报警，绝对不阻塞行为树！
                     ROSTopicManager::getInstance().hazardLightsOn();
                     ROSTopicManager::getInstance().hornOn();
-                    
-                    // 创建一个分离的后台线程，2秒后自动关喇叭，主线程瞬间结束不等待
+
                     std::thread([]() {
                         std::this_thread::sleep_for(std::chrono::seconds(2));
                         ROSTopicManager::getInstance().hornOff();
                     }).detach();
 
-                    // 🌟 3. 彻底废弃由行为树处理即时报警的标志，防止打断 Fallback
-                    // gs.setObstacleCtrl3Immediate(true);   <-- 删除这行 
-                    // gs.setObstacleCtrl3Acknowledged(false); <-- 删除这行
-
-                    // 4. 设置工作状态为5
                     TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
-                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=3: Obstacle pending, target (%.2f, %.2f, yaw=%.2f), state=5. Will avoid after current task completes",
-                             msg->target_x, msg->target_y, msg->target_yaw);
+                    res.taskCtrlSuccess = true;
+                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=3: Obstacle pending, target (%.2f, %.2f, yaw=%.2f), state=5",
+                             req.target_x, req.target_y, req.target_yaw);
                 }
                 break;
 
@@ -488,23 +482,20 @@ private:
                 gs.setPauseTask(true);
                 gs.setHaltRequested(true);
                 TaskStatusReporter::instance().setState(TaskStatusReporter::EMERGENCY_STOP);
+                res.taskCtrlSuccess = true;
                 ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=4: Emergency stop - halt BT, set state=4");
                 break;
 
-            case 5:  // 继续任务 - 统一发送恢复信号
+            case 5:  // 继续任务
                 {
                     gs.setPauseTask(false);
                     gs.setEmergencyStop(false);
                     gs.clearHaltRequested();
-                    
-                    // 🌟 核心修复：直接下发恢复信号，打破 WaitForRestore 的死等状态！
                     gs.setRestoreRequested(true);
-                    
-                    // 清除遗留标记
                     gs.setObstacleFromCtrl3(false);
                     gs.setObstacleCtrl3Immediate(false);
                     gs.setObstacleCtrl3Acknowledged(false);
-
+                    res.taskCtrlSuccess = true;
                     ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume task - sent restore signal to BT");
                 }
                 break;
@@ -513,44 +504,70 @@ private:
                 gs.setEndTask(true);
                 gs.setIsEnding(true);
                 TaskStatusReporter::instance().setState(TaskStatusReporter::ENDING);
-                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=6: End task - set state=7, will halt after current task completes");
+                res.taskCtrlSuccess = true;
+                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=6: End task - set state=7");
                 break;
 
             default:
-                ROS_WARN("\033[33m[TaskCtrl]\033[0m Unknown ctrlCmd: %d", msg->ctrlCmd);
+                res.taskCtrlSuccess = false;
+                ROS_WARN("\033[33m[TaskCtrl]\033[0m Unknown ctrlCmd: %d", req.ctrlCmd);
                 break;
         }
+
+        return true;
     }
 
     // ===== 避障相关回调函数 =====
     // obstacle_1/obstacle_2: 设置 obstacle_pending=true，等待任务完成后执行避障
-    void obstacle1Callback(const std_msgs::Bool::ConstPtr& msg)
+// 假设这是您处理 obstacle_1 话题的回调函数（请根据您实际的函数名进行对应修改）
+void obstacle1Callback(const std_msgs::Int8::ConstPtr& msg)
+{
+    if (msg->data == 1) // 假设数据为 1 表示触发避障
     {
-        if (msg->data) {
-            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-            if (!gs.isObstaclePending()) {
-                gs.setObstaclePending(true);     // 改为待执行模式
-                gs.setObstacleFromCtrl3(false);  // 标记来源不是ctrlCmd=3
-                gs.setObstacleType(1);           // obstacle_1
-                TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
-                ROS_INFO("\033[36m[Obstacle]\033[0m /obstacle_1 triggered, obstacle_pending=true, obstacle_type=1, state=5");
-            }
-        }
-    }
+        auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+        
+        // 1. 设置避障类型和待办标志
+        gs.setObstacleType(1); // 1 代表避障点1 (obstacle_1)
+        gs.setObstaclePending(true); // 设为 pending 表示等当前干完再去；如果想立刻去，可以设为 Triggered
 
-    void obstacle2Callback(const std_msgs::Bool::ConstPtr& msg)
-    {
-        if (msg->data) {
-            auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-            if (!gs.isObstaclePending()) {
-                gs.setObstaclePending(true);     // 改为待执行模式
-                gs.setObstacleFromCtrl3(false);  // 标记来源不是ctrlCmd=3
-                gs.setObstacleType(2);           // obstacle_2
-                TaskStatusReporter::instance().setState(TaskStatusReporter::OBSTACLE_STOP);
-                ROS_INFO("\033[36m[Obstacle]\033[0m /obstacle_2 triggered, obstacle_pending=true, obstacle_type=2, state=5");
-            }
-        }
+        // 🌟 2. 直接粘贴这段异步声光报警代码
+        autonomous_loader_bt::ROSTopicManager::getInstance().hazardLightsOn();
+        autonomous_loader_bt::ROSTopicManager::getInstance().hornOn();
+        std::thread([]() {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            autonomous_loader_bt::ROSTopicManager::getInstance().hornOff();
+        }).detach();
+
+        // 🌟 3. 立刻改变车辆状态为 5 ！
+        autonomous_loader_bt::TaskStatusReporter::instance().setState(5);
+
+        ROS_INFO("\033[33m[TopicCtrl]\033[0m Received obstacle_1 topic, target pending, state=5");
     }
+}
+
+// =====================================================================
+// 对于 obstacle_2_sub_, backstart_sub_ 的回调函数，也是完全一样的改法：
+// 只需要把 gs.setObstacleType(...) 里的数字换成对应的 2 或者 3 即可。
+// =====================================================================
+void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
+{
+    if (msg->data == 1)
+    {
+        auto& gs = autonomous_loader_bt::GlobalState::getInstance();
+        gs.setObstacleType(2); // 避障点2
+        gs.setObstaclePending(true); 
+
+        autonomous_loader_bt::ROSTopicManager::getInstance().hazardLightsOn();
+        autonomous_loader_bt::ROSTopicManager::getInstance().hornOn();
+        std::thread([]() {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            autonomous_loader_bt::ROSTopicManager::getInstance().hornOff();
+        }).detach();
+
+        autonomous_loader_bt::TaskStatusReporter::instance().setState(5);
+        ROS_INFO("\033[33m[TopicCtrl]\033[0m Received obstacle_2 topic, target pending, state=5");
+    }
+}
 
     void backstartCallback(const std_msgs::Bool::ConstPtr& msg)
     {
@@ -662,13 +679,13 @@ private:
     ros::Subscriber start_task_sub_;
     ros::Subscriber pause_task_sub_;
     ros::Subscriber end_task_sub_;
-    ros::Subscriber taskctrl_sub_;
     ros::Subscriber obstacle_1_sub_;
     ros::Subscriber obstacle_2_sub_;
     ros::Subscriber backstart_sub_;
     ros::Subscriber restore_sub_;
     
     ros::ServiceServer task_service_;
+    ros::ServiceServer task_ctrl_service_;
     
     std::unique_ptr<BT::StdCoutLogger> console_logger_;
     std::unique_ptr<BT::FileLogger2> file_logger_;

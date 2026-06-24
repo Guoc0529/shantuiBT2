@@ -559,12 +559,14 @@
                                         <Fallback>
                                             <CheckArmBucketDone expect_code="7"/>
                                             <Sequence>
-                                                <WaitForNavigationArrival message="Waiting nav arrival to scoop"/>
+                                                <!-- 🌟 核心修复：删掉 WaitForNavigationArrival -->
+                                                <!-- 让系统直接在这里阻塞，实时监控距离，一旦进入3米范围立刻放行 -->
                                                 <CheckDistanceThreshold threshold_name="stop_scoop_distance"/>
+                                                
                                                 <SetArmBucketState code="7"/>
                                                 <Fallback>
-                                                    <WaitForArmBucketCompletion timeout_s="300" message="Arrived at scoop point, scooping"/>
-                                                    <!-- 铲装失败处理 -->
+                                                    <!-- 这里可以把 message 改一下，因为是提前铲料了 -->
+                                                    <WaitForArmBucketCompletion timeout_s="300" message="Distance < 3m, starting to scoop in advance"/>
                                                     <Sequence>
                                                         <SetWorkState value="4"/>
                                                         <RequestManualIntervention message="Scooping action failed, vehicle stopped"/>

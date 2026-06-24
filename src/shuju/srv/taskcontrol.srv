@@ -1,0 +1,8 @@
+int32 taskID
+int32 ctrlCmd
+float64 target_x
+float64 target_y
+float64 target_yaw
+bool has_location
+---
+bool taskCtrlSuccess

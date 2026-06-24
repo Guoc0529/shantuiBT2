@@ -35,7 +35,7 @@ from autonomous_loader_msgs.msg import (
     TaskCommand,
 )
 from autonomous_loader_msgs.srv import spadingPose
-from shuju.msg import TaskCtrl
+from shuju.srv import taskcontrol, taskcontrolRequest
 
 # ----------------------- ctrlCmd 定义 ---------------------------
 CTRL_CMD_NAMES = {
@@ -172,9 +172,9 @@ class ManualInterventionTester:
         self.mi_pub   = rospy.Publisher("/autonomous_loader/manual_intervention_complete", Bool, queue_size=1)
         self.status_sub = rospy.Subscriber(f"{bt_ns}/state_machine/status", String, self._status_cb)
 
-        # TaskCtrl 发布者
-        self.ctrl_pub = rospy.Publisher("/task_ctrl_command", TaskCtrl, queue_size=10)
-        rospy.sleep(0.2)  # Wait for publisher to be ready
+        # TaskCtrl 服务客户端
+        self._ctrl_srv = rospy.ServiceProxy("/task_control_srv", taskcontrol)
+        rospy.sleep(0.2)  # Wait for service to be ready
 
         # 服务 client
         self._spade_cli = rospy.ServiceProxy("/spadingPose", spadingPose)
@@ -221,19 +221,28 @@ class ManualInterventionTester:
         self.nav_mock.set_mode(NavMode.NORMAL)
 
     # ----------- TaskCtrl 指令发送 -------------
-    def send_ctrl_cmd(self, ctrl_cmd: int, task_id: int = 1):
-        """发送 TaskCtrl 命令"""
-        msg = TaskCtrl()
-        msg.taskID = task_id
-        msg.ctrlCmd = ctrl_cmd
-        msg.target_x = 0.0
-        msg.target_y = 0.0
-        msg.target_yaw = 0.0
-        msg.has_location = False
-        msg.timestamp = time.time()
-        self.ctrl_pub.publish(msg)
-        cmd_name = CTRL_CMD_NAMES.get(ctrl_cmd, "Unknown")
-        self.log.info("Sent TaskCtrl: ctrlCmd=%d (%s), taskID=%d", ctrl_cmd, cmd_name, task_id)
+    def send_ctrl_cmd(self, ctrl_cmd: int, task_id: int = 1,
+                      target_x: float = 0.0, target_y: float = 0.0,
+                      target_yaw: float = 0.0, has_location: bool = False):
+        """发送 TaskCtrl 命令（通过服务调用）"""
+        req = taskcontrolRequest()
+        req.taskID = task_id
+        req.ctrlCmd = ctrl_cmd
+        req.target_x = target_x
+        req.target_y = target_y
+        req.target_yaw = target_yaw
+        req.has_location = has_location
+
+        try:
+            resp = self._ctrl_srv(req)
+            cmd_name = CTRL_CMD_NAMES.get(ctrl_cmd, "Unknown")
+            if resp.taskCtrlSuccess:
+                self.log.info("TaskCtrl ctrlCmd=%d (%s) accepted, taskID=%d",
+                              ctrl_cmd, cmd_name, task_id)
+            else:
+                self.log.warning("TaskCtrl ctrlCmd=%d rejected", ctrl_cmd)
+        except rospy.ServiceException as e:
+            self.log.error("TaskCtrl service call failed: %s", e)
 
     # ----------- 状态回调 -------------
     def _status_cb(self, msg: String):
