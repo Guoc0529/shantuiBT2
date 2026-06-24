@@ -1041,6 +1041,7 @@ private:
     bool vehicle_idle_ = false;
     bool task_canceled_ = false;
     bool estop_released_ = false;
+    int snapshot_state_ = 1;
 
     void taskStatusCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
 };

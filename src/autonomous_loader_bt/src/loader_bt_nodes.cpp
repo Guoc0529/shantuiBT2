@@ -1331,7 +1331,7 @@ WaitForManualOverride::WaitForManualOverride(const std::string& name, const BT::
     intervention_sub_ = nh_.subscribe("/autonomous_loader/manual_intervention_complete", 1,
                                       &WaitForManualOverride::interventionCallback, this);
     vehicle_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/bt_override/vehicle_pose", 1, true);
-    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1);
+    // estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1);
 }
 
 void WaitForManualOverride::interventionCallback(const std_msgs::Bool::ConstPtr& msg)
@@ -2081,6 +2081,7 @@ void VcuDriveModeListener::driveModeCallback(const std_msgs::UInt8::ConstPtr& ms
         ROS_WARN("\033[31m[BT]\033[0m === Remote control ACTIVATED (drive_mode=%d) ===", drive_mode);
         current_drive_mode_ = drive_mode;
         GlobalState::getInstance().setRemoteControlActive(true);
+        TaskStatusReporter::instance().setState(TaskStatusReporter::REMOTE_CONTROL);
     } else if (!now_active && was_active) {
         // 退出遥控模式
         ROS_WARN("\033[32m[BT]\033[0m === Remote control DEACTIVATED (drive_mode=%d) ===", drive_mode);
@@ -2132,7 +2133,7 @@ BT::NodeStatus SaveRemoteControlSnapshot::tick()
     // 发送急停指令
     std_msgs::UInt8 estop_msg;
     estop_msg.data = 1;  // 1=急停
-    estop_pub_.publish(estop_msg);
+    // estop_pub_.publish(estop_msg);
     ROS_WARN("\033[31m[BT]\033[0m === Emergency Stop SENT ===");
 
     return BT::NodeStatus::SUCCESS;
@@ -2187,7 +2188,7 @@ void RecoverFromRemoteControl::taskStatusCallback(const std_msgs::Int32MultiArra
 RecoverFromRemoteControl::RecoverFromRemoteControl(const std::string& name, const BT::NodeConfiguration& config)
     : BT::StatefulActionNode(name, config), nh_("~")
 {
-    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
+    // estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
     task_ctrl_pub_ = nh_.advertise<shuju::TaskCtrl>("/task_ctrl", 1, true);
     task_status_sub_ = nh_.subscribe("/vehicle/task_status", 1, &RecoverFromRemoteControl::taskStatusCallback, this);
 }
@@ -2213,6 +2214,7 @@ BT::NodeStatus RecoverFromRemoteControl::onStart()
     }
 
     int snapshot_state = gs.getSnapshotWorkState();
+    snapshot_state_ = snapshot_state;  // 保存到成员变量供 onRunning 使用
     geometry_msgs::PoseStamped snapshot_pose = gs.getSnapshotPose();
     geometry_msgs::PoseStamped current_pose = gs.getCurrentPose();
 
@@ -2231,11 +2233,14 @@ BT::NodeStatus RecoverFromRemoteControl::onStart()
         // 解除急停
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;  // 0=解除
-        estop_pub_.publish(estop_msg);
+        // estop_pub_.publish(estop_msg);
         estop_released_ = true;
 
         gs.setRemoteControlRecovering(false);
         gs.clearRemoteControlSnapshot();
+
+        // 恢复到原来的工作状态
+        TaskStatusReporter::instance().setState(snapshot_state);
 
         return BT::NodeStatus::SUCCESS;
     }
@@ -2247,11 +2252,14 @@ BT::NodeStatus RecoverFromRemoteControl::onStart()
         // 解除急停
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;  // 0=解除
-        estop_pub_.publish(estop_msg);
+        // estop_pub_.publish(estop_msg);
         estop_released_ = true;
 
         gs.setRemoteControlRecovering(false);
         gs.clearRemoteControlSnapshot();
+
+        // 恢复到原来的工作状态
+        TaskStatusReporter::instance().setState(snapshot_state);
 
         return BT::NodeStatus::SUCCESS;
     }
@@ -2296,11 +2304,14 @@ BT::NodeStatus RecoverFromRemoteControl::onRunning()
 
         std_msgs::UInt8 estop_msg;
         estop_msg.data = 0;  // 0=解除
-        estop_pub_.publish(estop_msg);
+        // estop_pub_.publish(estop_msg);
         estop_released_ = true;
 
         GlobalState::getInstance().setRemoteControlRecovering(false);
         GlobalState::getInstance().clearRemoteControlSnapshot();
+
+        // 恢复到原来的工作状态
+        TaskStatusReporter::instance().setState(snapshot_state_);
 
         return BT::NodeStatus::SUCCESS;
     }
