@@ -882,12 +882,6 @@ BT::NodeStatus CheckNewTask::tick()
 {
     auto& state = GlobalState::getInstance();
 
-    // 如果第一个任务正在等待 ctrlCmd=1，则不认为有新任务
-    if (state.isFirstTaskWaitingCtrlcmd()) {
-        ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckNewTask: first task waiting for ctrlCmd=1, returning FAILURE");
-        return BT::NodeStatus::FAILURE;
-    }
-
     bool has_task = state.hasNewTask();
     ROS_INFO_THROTTLE(5.0, "\033[36m[BT_DEBUG]\033[0m CheckNewTask: hasNewTask=%d", has_task);
     return has_task ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
@@ -2118,7 +2112,9 @@ BT::NodeStatus SaveRemoteControlSnapshot::tick()
 
     if (!gs.isRemoteControlActive()) {
         // 不是遥控模式，跳过
-        return BT::NodeStatus::FAILURE;
+        // return BT::NodeStatus::FAILURE;
+        return BT::NodeStatus::SUCCESS;
+
     }
 
     // 保存当前工作状态和位置快照

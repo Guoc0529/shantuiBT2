@@ -394,17 +394,9 @@ private:
         nh_.setParam("ArmBucketState", 2);
         ROS_INFO("\033[36m[BT]\033[0m Set param ArmBucketState=2 (prepare raise arm)");
 
-        // 检查是否需要等待第一个任务的 ctrlCmd=1
         auto& gs = autonomous_loader_bt::GlobalState::getInstance();
-        if (gs.isFirstTaskWaitingCtrlcmd()) {
-            // 第一个任务：不清除 start_task_，等待 ctrlCmd=1
-            gs.setStartTask(false);  // 确保 start_task 为 false
-            ROS_INFO("\033[36m[BT]\033[0m First task received, waiting for ctrlCmd=1 to start");
-        } else {
-            // 后续任务：立即设置 start_task=true，自动开始执行
-            gs.setStartTask(true);
-            ROS_INFO("\033[36m[BT]\033[0m Subsequent task, auto-start enabled");
-        }
+        gs.setStartTask(true);
+        ROS_INFO("\033[36m[BT]\033[0m Task received, auto-start enabled");
     }
 
     void pauseTaskCallback(const std_msgs::Bool::ConstPtr& msg)
@@ -644,17 +636,9 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
 
         auto& gs = GlobalState::getInstance();
 
-        // 检查是否是第一个任务，需要等待 ctrlCmd=1
-        bool is_first_task = !gs.hasNewTask() && gs.getCurrentTask().task_id == 0;
-        if (is_first_task) {
-            gs.setFirstTaskWaitingCtrlcmd(true);
-            gs.setStartTask(false);
-            ROS_INFO("\033[36m[BT]\033[0m First task received, waiting for ctrlCmd=1 to start");
-        } else {
-            gs.setFirstTaskWaitingCtrlcmd(false);
-            gs.setStartTask(true);
-            ROS_INFO("\033[36m[BT]\033[0m Subsequent task, auto-start enabled");
-        }
+        gs.setFirstTaskWaitingCtrlcmd(false);
+        gs.setStartTask(true);
+        ROS_INFO("\033[36m[BT]\033[0m Task received, auto-start enabled");
 
         gs.addTask(task);
         gs.setTaskId(req.taskID);
