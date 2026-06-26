@@ -1,0 +1,3 @@
+rosservice call /bucket_collision_recover "{}"
+
+

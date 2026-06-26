@@ -422,8 +422,25 @@ private:
 // ## 主检测函数：统一逻辑处理所有障碍物
     void checkObstacles()
     {
+        // 0. 读取 /ArmBucketState，判断是否需要清空路径（在加锁前读取，避免死锁）
+        int arm_bucket_state = 0;
+        ros::param::get("/ArmBucketState", arm_bucket_state);
+        if (last_workstate_ != -1 && (arm_bucket_state == 6 || arm_bucket_state == 7)) {
+            ROS_WARN("[ObstacleAvoider] workstate changed to %d, will clear path.", arm_bucket_state);
+            need_clear_path_ = true;
+        }
+        last_workstate_ = arm_bucket_state;
+
         // 1. 获取数据
         data_mutex_.lock();
+        if (need_clear_path_) {
+            if (!current_path_.poses.empty()) {
+                ROS_WARN("[ObstacleAvoider] Clearing path (was %zu poses).", current_path_.poses.size());
+            }
+            current_path_.poses.clear();
+            current_path_.header.stamp = ros::Time::now();
+            need_clear_path_ = false;
+        }
         nav_msgs::Path path = current_path_;
         lidar_camera_fusion::PerceptInfo self_info = percept_info_;
         jsk_recognition_msgs::BoundingBoxArray bbox_obstacles = bbox_array_;
@@ -435,13 +452,10 @@ private:
         ros::Time now = ros::Time::now(); // 这里的 now 保留
         if (!last_perception_recv_time_.isZero() && (now - last_perception_recv_time_).toSec() > 0.5) {
             ROS_WARN_THROTTLE(2.0, "[Timeout] Bag paused or topic stopped! Skipping obstacle check.");
-            resetConfirmationCounter(); 
-            return; 
+            resetConfirmationCounter();
+            return;
         }
         // ========================================================
-
-        int arm_bucket_state = 0;
-        ros::param::get("/ArmBucketState", arm_bucket_state);
 
         bool is_in_stockyard = self_info.loc.x > stockyard_x_threshold_;
         bool arm_is_raising = (arm_bucket_state == arm_raising_state_);
@@ -677,8 +691,8 @@ private:
         getLocalCoordsFromObstacle(obstacle, self_info, local_x, local_y);
 
         // --- Rule B: Body boundary check (min_dist <= 0 means overlap) ---
-        if (min_dist <= safety_thresholds_.body_proximity) {
-        // if (false) {
+        if (false) {
+        // if (min_dist <= safety_thresholds_.body_proximity) {
             int confirm_count = 0;
             bool confirmed = updateConfirmationCounter("Rule_B", rule_b_confirm_frames_, confirm_count,
                                                       local_x, local_y);
@@ -791,6 +805,10 @@ private:
     nav_msgs::Path current_path_;
     lidar_camera_fusion::PerceptInfo percept_info_;
     jsk_recognition_msgs::BoundingBoxArray bbox_array_;
+
+    // 状态切换检测：workstate 变为 6 或 7 时标记清空路径
+    int last_workstate_ = -1;
+    bool need_clear_path_ = false;
 
     // ===== Logging related =====
 public:

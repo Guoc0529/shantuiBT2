@@ -249,7 +249,7 @@ public:
         nav_goal.end_pose = goal;
         nav_goal.last_status = static_cast<uint8_t>(last_status_);
         nav_goal.current_status = static_cast<uint8_t>(NavigationStatus::OTHER);
-        nav_goal.current_id = 0;
+        nav_goal.current_id = 1;
         nav_goal.last_id = 0;
 
         ROS_INFO("\033[36m[OBSTACLE]\033[0m Sending obstacle navigation goal via Action (%.2f, %.2f)",
@@ -262,6 +262,8 @@ public:
             [this](const actionlib::SimpleClientGoalState& state,
                    const autonomous_loader_msgs::NavigateResultConstPtr& res)
             {
+                ROS_INFO("\033[33m[OBSTACLE]\033[0m sendGoal doneCb triggered, state=[%s], success=%d",
+                         state.toString().c_str(), res ? res->success : -1);
                 autonomous_loader_msgs::NavigateResult result;
                 result.success = false;
                 if (res) result = *res;
@@ -272,10 +274,15 @@ public:
                     ROS_INFO("\033[36m[OBSTACLE]\033[0m Obstacle navigation succeeded");
                 }
             },
-            NavigateClient::SimpleActiveCallback(),
+            [this]()
+            {
+                ROS_INFO("\033[33m[OBSTACLE]\033[0m sendGoal ACTIVE callback fired — server received goal");
+            },
             [this](const autonomous_loader_msgs::NavigateFeedbackConstPtr& fb)
             {
                 if (!fb) return;
+                ROS_INFO_THROTTLE(2.0, "\033[33m[OBSTACLE]\033[0m Feedback: distance=%.2f, plan_succeeded=%d",
+                                 fb->distance_to_goal, fb->plan_succeeded);
                 if (on_distance_update_) on_distance_update_(fb->distance_to_goal);
                 if (on_planning_feedback_) {
                     on_planning_feedback_(fb->plan_succeeded);

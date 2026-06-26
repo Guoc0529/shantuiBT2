@@ -1,0 +1,55 @@
+# Private parameters for center_articulation_planner_node
+# These are loaded via roslaunch/rosparam into the node's private namespace.
+
+# Topics
+goal_topic: "/move_base_simple/goal"
+planner_goal_topic: "/planner_goal"
+legacy_goal_topic: "/goal_chao"
+reach_topic: "/goal_reached"
+is_forward_topic: "/is_forward"
+front_pose_topic: "/Odometry_qianlun"
+rear_pose_topic: "/Odometry_houlun"
+map_topic: "/map"
+distance_topic: "/distance_to_goal"
+shache_topic: "/ACU_BrakePct"
+navigate_action_name: "navigate"
+global_path_topic: "/run_hybrid_astar/extended_global_path"
+segmented_path_topic: "/segmented_path"
+local_path_topic: "/local_path"
+
+# Planner config file (parsed by LoadPlannerConfig)
+planner_config_path: "$(find center_articulation_planner_legacy)/config/params.json"
+
+# Pile-based shovel goal adjustment
+pile_low_threshold_percent: 60
+pile_low_offset_x_m: 2.0
+
+# Unload planning goal adjustment
+unload_goal_offset_x_m: 2.0
+
+# Distance to goal for publishing is_unload
+unload_trigger_distance: 8.0
+
+# Distance to goal for early completion on load tasks (<=0 disables)
+load_early_complete_distance_m: 2.0
+
+# BackingOutUnload: recovery when yaw error at unload goal is too large
+backout_yaw_threshold_rad: 0.1   # 触发退出-重入的 yaw 误差阈值（rad）
+backout_distance_m: 8.0         # 退出距离（沿 x 轴正向，m）
+backout_lateral_threshold_m: 0.4         # 侧向误差阈值（m），与 backout_lateral_yaw_threshold_rad 联合触发
+backout_lateral_yaw_threshold_rad: 0.8   # 侧向触发时要求的最小 yaw 误差（rad）
+
+# Debug mode gate for AlignInPlace
+debug_mode: true
+# AlignInPlace triggers (applied when debug_mode is true)
+align_pos_thresh_m: 0.15          # 首段欧氏距离阈值 (m)
+align_lateral_thresh_m: 0.15      # 非首段横向误差阈值 (m)，用于Frenet坐标系判断
+align_heading_thresh_deg: 20.0
+
+large_lateral_replan_thresh_m: 1.5
+max_remaining_replan_count: 1
+
+# Near-goal guard (only active in debug_mode)
+goal_guard_distance_m: 3.5
+goal_guard_angle_deg: 100.0
+goal_guard_forward_deadzone_m: 0.265

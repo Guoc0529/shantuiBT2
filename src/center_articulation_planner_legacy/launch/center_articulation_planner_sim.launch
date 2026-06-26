@@ -1,0 +1,36 @@
+<launch>
+  <!-- Enable sim time if needed -->
+  <arg name="use_sim_time" default="false" />
+  <arg name="plan_service" default="/run_hybrid_astar/plan_hybrid_path" />
+  <arg name="set_params_service" default="/run_hybrid_astar/set_planner_params" />
+  <arg name="planner_service_timeout" default="3.0" />
+  <arg name="direction_switch_settle_delay_sec" default="0.1" />
+  <arg name="map_subscribe_enabled" default="false" />
+  <arg name="node_name" default="center_articulation_planner_node" />
+
+  <node pkg="center_articulation_planner_legacy"
+        type="center_articulation_planner_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="use_sim_time" value="$(arg use_sim_time)" />
+    <param name="plan_service" value="$(arg plan_service)" />
+    <param name="set_params_service" value="$(arg set_params_service)" />
+    <param name="planner_service_timeout" value="$(arg planner_service_timeout)" />
+    <param name="direction_switch_settle_delay_sec" value="$(arg direction_switch_settle_delay_sec)" />
+    <param name="map_subscribe_enabled" value="$(arg map_subscribe_enabled)" />
+
+    <!-- Load all planner ROS topics and config path into the node's private namespace -->
+    <rosparam command="load"
+              file="$(find center_articulation_planner_legacy)/config/center_articulation_planner_params.yaml"
+              subst_value="true" />
+  </node>
+
+  <!-- Echo /is_forward into /is_forward_state so the planner can progress when running standalone -->
+  <node pkg="center_articulation_planner_legacy"
+        type="is_forward_state_feeder.py"
+        name="is_forward_state_feeder"
+        output="screen">
+    <param name="is_forward_topic" value="/is_forward" />
+    <param name="is_forward_state_topic" value="/is_forward_state" />
+  </node>
+</launch>

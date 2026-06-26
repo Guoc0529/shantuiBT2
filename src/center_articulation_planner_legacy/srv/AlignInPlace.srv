@@ -1,0 +1,6 @@
+bool use_rear_pose_source   # 当前 Planner 是否在用 rear 坐标系
+float32 target_angle        # 期望的/vcu_turn_angle
+---
+bool success
+string message
+float64 final_angle_deg

@@ -1,0 +1,15 @@
+# Goal
+geometry_msgs/PoseStamped end_pose
+uint8 last_status  # 状态：'铲料-0' | '卸料-1' | '其他-2'
+uint8 current_status  # 当前状态：'铲料-0' | '卸料-1' | '其他-2'
+---
+# Result
+bool success         # 是否到达目标点位
+float64 final_distance_error  # 到达时的最终距离误差
+float64 final_angle_error # 到达时的最终角度误差
+uint8 error_code          # 错误代码
+string error_msg          # 错误信息
+---
+# Feedback
+float64 distance_to_goal  # 距离目标（米）
+bool plan_succeeded       # 是否规划成功

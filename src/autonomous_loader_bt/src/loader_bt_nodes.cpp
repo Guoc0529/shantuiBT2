@@ -259,6 +259,10 @@ double ConfigManager::getTimeout(const std::string& timeout_name)
 void GlobalState::addTask(const Task& task)
 {
     std::lock_guard<std::mutex> lock(mutex_);
+    // 方案1: 收到新任务时清空队列，只保留最新任务
+    while (!task_queue_.empty()) {
+        task_queue_.pop();
+    }
     task_queue_.push(task);
 }
 
