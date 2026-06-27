@@ -121,8 +121,6 @@ namespace jhzx::center_articulation_planner
                                      int8_t task_type = 0);
     geometry_msgs::PoseStamped buildPlanGoal(bool &goal_adjusted_for_pile);
     int8_t remotePlannerTaskType() const;
-    bool isUnloadTask() const;
-    void reversePlanForTracking(PlanAttemptResult &attempt);
     void applyPlanAttempt(PlanAttemptResult attempt,
                           bool goal_adjusted_for_pile,
                           bool reset_segment_index);
@@ -183,8 +181,6 @@ namespace jhzx::center_articulation_planner
 
     std::shared_ptr<local_planner::LocalPlanner> local_planner_ptr_;
     std::unique_ptr<class RemotePlannerBackend> planner_backend_;
-    ros::NodeHandle nh_;
-    ros::NodeHandle pnh_;
 
     PlannerState state_{PlannerState::Idle};
     size_t current_index_{0};
@@ -214,10 +210,6 @@ namespace jhzx::center_articulation_planner
     uint8_t current_id_{0};   // 新增：当前铲�?卸料 id（为0时进入停车模式）
     TaskType current_task_{TaskType::Unknown};
     bool brake_engaged_{false};
-    // 中转点切换 drive_mode + brake 的流水线标志（0 秒等待，一次性 onTick 内全部完成）
-    bool need_inter_segment_drive_mode_switch_{false};
-    bool inter_segment_brake_engaged_{false};
-    ros::Timer inter_segment_settle_timer_;  // 占位：当前方案 0 秒等待，未实际使用
     double distance_to_goal_{0.0};
     bool has_distance_{false};
     bool unload_flag_sent_{false};
@@ -269,15 +261,10 @@ namespace jhzx::center_articulation_planner
                                 double scale, double min_dist, int points, nav_msgs::Path &out_path);
     void extractPathSegment(const nav_msgs::Path &path, size_t start_seg, double start_t, double length_budget, nav_msgs::Path &out_path);
 
+    // 从 curr 在 path 上的最近投影点起，沿 path 向前裁剪 x_meter 弧长（无车位姿连线）
     nav_msgs::Path clipPathByLookahead(const nav_msgs::Path &path,
                                        const geometry_msgs::Pose &curr,
-                                       double x_meter = 8.0,
-                                       double lateral_offset_threshold = 0.2,
-                                       double merge_distance_scale = 1.2,
-                                       double merge_min_distance = 2.0,
-                                       int merge_curve_points = 12,
-                                       double merge_forward_distance = 3.5,
-                                       double yaw_trigger_deg = 10.0);
+                                       double x_meter = 8.0);
     bool nearGoalUnreachable(double remaining_dist,
                              double &forward_m,
                              double &lateral_m,

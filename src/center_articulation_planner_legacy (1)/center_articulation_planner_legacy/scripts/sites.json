@@ -1,0 +1,2903 @@
+{
+  "version": "1.0",
+  "sites": [
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 14.363889423021927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 14.363889423021927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 14.363889423021927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 14.363889423021927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 13.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 13.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 13.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 13.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 13.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 13.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 13.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 13.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 12.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 12.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 12.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 12.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 12.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 12.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 12.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 12.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 11.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 11.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 11.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 11.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 11.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 11.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 11.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 11.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.1689,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 10.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.1689,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 10.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.1689,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 10.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.1689,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 10.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 10.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 10.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 10.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 10.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 9.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 9.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 9.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 9.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 9.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 9.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 9.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 9.402945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 8.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 8.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 8.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 8.902945710237926
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 8.442001997453927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 8.442001997453927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 8.442001997453927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-02",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 8.442001997453927
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 26.026991433522046
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 26.026991433522046
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 26.026991433522046
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 26.026991433522046
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.8469,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 25.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.8469,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 25.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.8469,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 25.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.8469,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 25.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.6808,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 25.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.6808,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 25.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.6808,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 25.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.6808,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 25.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.5148,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 24.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.5148,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 24.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.5148,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 24.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.5148,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 24.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.3487,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 24.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.3487,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 24.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.3487,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 24.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.3487,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 24.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.1827,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 23.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.1827,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 23.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.1827,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 23.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.1827,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 23.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.0166,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 23.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.0166,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 23.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.0166,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 23.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.0166,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 23.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.1495,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 22.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.1495,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 22.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.1495,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 22.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.1495,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 22.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.3155,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 22.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.3155,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 22.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.3155,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 22.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.3155,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 22.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.4816,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 21.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.4816,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 21.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.4816,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 21.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.4816,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 21.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.6476,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 21.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.6476,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 21.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.6476,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 21.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.6476,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 21.066047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.8137,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 20.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.8137,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 20.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.8137,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 20.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.8137,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 20.566047720738045
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 20.005104007954042
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 20.005104007954042
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 20.005104007954042
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-01",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 20.005104007954042
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 3.400787412521806
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 3.400787412521806
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 3.400787412521806
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 3.400787412521806
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 2.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 2.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 2.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.8443,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 2.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 2.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 2.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 2.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.6755,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 2.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 1.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 1.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 1.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.5066,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 1.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 1.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 1.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 1.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.3377,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 1.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 0.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 0.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 0.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.1689,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 0.9398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": 0.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": 0.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": 0.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": 0.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": 0.4398436997378066
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.1693,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -0.061563
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.1693,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -0.061563
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.1693,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -0.061563
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.1693,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -0.061563
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -0.56016
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -0.56016
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -0.56016
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.3377,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -0.56016
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -1.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -1.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -1.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.5066,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -1.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -1.5601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -1.5601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -1.5601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.6755,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -1.5601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -2.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -2.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -2.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -0.8443,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -2.0601563002621934
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.7,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 6.573890435284421,
+          "y": -2.5211000130461936
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.8,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 3.6213802997323095,
+          "y": -2.5211000130461936
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 0.9,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": 1.4069883294390668,
+          "y": -2.5211000130461936
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "load-03",
+      "type": "load",
+      "pile_percent": 1.0,
+      "y_offset": -1.0,
+      "pose": {
+        "position": {
+          "x": -2.2512179692586365,
+          "y": -2.5211000130461936
+        },
+        "orientation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "w": 1.0
+        }
+      }
+    },
+    {
+      "id": "unload-01",
+      "type": "unload",
+      "pile_percent": 0.0,
+      "y_offset": 0,
+      "pose": {
+        "position": {
+          "x": -15.1643752129964,
+          "y": 14.382705442794364
+        },
+        "orientation": {
+          "x": -0.020948652294491365,
+          "y": -0.00209537953141494,
+          "z": -0.9995324787922495,
+          "w": 0.022171765628500463
+        }
+      }
+    },
+    {
+      "id": "unload-02",
+      "type": "unload",
+      "pile_percent": 0.0,
+      "y_offset": 0,
+      "pose": {
+        "position": {
+          "x": -15.17957650773228,
+          "y": 10.894878021380373
+        },
+        "orientation": {
+          "x": -0.01821048323491372,
+          "y": 0.0010441510169601257,
+          "z": -0.9996450905037791,
+          "w": 0.019416000635970845
+        }
+      }
+    },
+    {
+      "id": "unload-03",
+      "type": "unload",
+      "pile_percent": 0.0,
+      "y_offset": 0,
+      "pose": {
+        "position": {
+          "x": -15.177161142814047,
+          "y": 7.353390208152901
+        },
+        "orientation": {
+          "x": -0.01836773595573719,
+          "y": 0.001966230204625294,
+          "z": -0.99971025100820122,
+          "w": 0.015432894860080546
+        }
+      }
+    },
+    {
+      "id": "unload-04",
+      "type": "unload",
+      "pile_percent": 0.0,
+      "y_offset": 0,
+      "pose": {
+        "position": {
+          "x": -15.178693112728315,
+          "y": 3.85260653028156632
+        },
+        "orientation": {
+          "x": -0.01915907862288531,
+          "y": -0.00146892278664861054,
+          "z": -0.999723296128434,
+          "w": 0.013793142775448694
+        }
+      }
+    },
+    {
+      "id": "unload-05",
+      "type": "unload",
+      "pile_percent": 0.0,
+      "y_offset": 0,
+      "pose": {
+        "position": {
+          "x": -15.16283379127579,
+          "y": 0.383069712720202132
+        },
+        "orientation": {
+          "x": -0.019655324650434072,
+          "y": -0.001201318924506151,
+          "z": -0.9997419561164232,
+          "w": 0.011324585035893842
+        }
+      }
+    }
+  ]
+}

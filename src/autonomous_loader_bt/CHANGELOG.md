@@ -1,5 +1,126 @@
 # 代码修改记录
 
+## 2026-06-26: 遥控接管流程重构（不再立即发 beginDrvModeConfirm(0)）
+
+### 需求
+
+1. 收到 `vcu_drive_mode=2` 进入遥控时**不**立即发 `gs.beginDrvModeConfirm(0)`
+2. 只保存快照 + 记录进入遥控前的 `/ACU_DrvModeReq` 值（`saved_drv_mode_req_`）
+3. 退出遥控后，永久等待 `/taskoverstop` 服务触发：
+   - `mode=0` 恢复之前任务 → 发 `saved_drv_mode_req`
+   - `mode=1` 取消任务 → 发 `taskID=0` 到 `/task_ctrl`，等车辆空闲后发 `saved_drv_mode_req`
+
+### 修改文件
+
+#### 1. `src/shuju/CMakeLists.txt`
+- 注册新服务 `takeoverstop.srv`
+
+#### 2. `src/shuju/srv/takeoverstop.srv` (新建)
+```srv
+int32 mode    # 0=恢复任务, 1=取消任务
+---
+bool success
+```
+
+#### 3. `include/autonomous_loader_bt/loader_bt_nodes.h`
+
+**GlobalState 新增成员:**
+```cpp
+// 驾驶模式确认状态 (/ACU_DrvModeReq)
+int current_drv_mode_req_ = 0;       // 订阅回读
+int saved_drv_mode_req_ = 0;         // 进入遥控时记录
+int pending_drv_mode_req_ = 0;       // 连发目标
+bool drv_mode_confirming_ = false;   // 是否在连发
+int drv_mode_confirm_count_ = 0;     // 已发次数
+ros::Time drv_mode_confirm_start_time_;
+
+// /taskoverstop 服务触发标志: -1=未触发, 0=恢复, 1=取消
+int pending_takeover_mode_ = -1;
+```
+
+**GlobalState 新增方法:**
+```cpp
+void beginDrvModeConfirm(int target_mode);
+void stopDrvModeConfirm();
+void setCurrentDrvModeReq(int mode);
+int  getCurrentDrvModeReq() const;
+void setSavedDrvModeReq(int mode);
+int  getSavedDrvModeReq() const;
+bool isDrvModeConfirming() const;
+int  getPendingDrvModeReq() const;
+int  getDrvModeConfirmCount() const;
+ros::Time getDrvModeConfirmStartTime() const;
+void incrementDrvModeConfirmCount();
+void setPendingTakeoverMode(int mode);
+int  getPendingTakeoverMode() const;
+```
+
+**VcuDriveModeListener 新增:**
+- 订阅 `/ACU_DrvModeReq` → `drv_mode_req_sub_`
+- 发布 `/ACU_DrvModeReq` → `drv_mode_req_pub_`
+- 200ms 定时器 → `drv_mode_confirm_timer_`（连发 beginDrvModeConfirm 目标 5 次）
+- 新增 `drvModeReqCallback()` / `drvModeConfirmTimerCb()`
+
+**SaveRemoteControlSnapshot:**
+- 删除 estop_pub_ / 发急停代码
+- 仅保存快照（主快照已在 VcuDriveModeListener 回调中保存）
+
+**RecoverFromRemoteControl:**
+- 删除 `timeout` 输入端口（永久等待）
+- 删除 position_ok_ / estop_released_ 字段
+- onStart: 一律进入 RUNNING 永久等 /taskoverstop 服务
+- onRunning: 三阶段
+  - 阶段1: `pending_takeover_mode_ == -1` → RUNNING 永久等待
+  - 阶段2: `mode=0` → 直接 `beginDrvModeConfirm(saved)`
+  - 阶段3: `mode=1` → 发 `taskID=0` 到 `/task_ctrl` → 等 `vehicle_idle_` → `beginDrvModeConfirm(saved)`
+
+#### 4. `src/loader_bt_nodes.cpp`
+
+**driveModeCallback 重写:**
+- 进入遥控 (drive_mode=2): 仅 `setSavedDrvModeReq(current)` + `setRemoteControlSnapshot` + `setRemoteControlActive(true)`
+- 退出遥控 (drive_mode=1): 仅 `setRemoteControlActive(false)` + `setRemoteControlRecovering(true)`
+- **不**发急停, **不**发 `beginDrvModeConfirm`
+
+**drvModeConfirmTimerCb 新增:**
+- 200ms 周期检查 `isDrvModeConfirming()`
+- 1秒内发 5 次 `pending_drv_mode_req_` 到 `/ACU_DrvModeReq`
+
+#### 5. `src/autonomous_loader_bt_node.cpp`
+- 注册服务 `/taskoverstop` → `takeoverStopCallback`
+- callback 中将 `req.mode` 存入 `GlobalState::setPendingTakeoverMode(req.mode)`
+
+### 新流程时序
+
+```
+1. VCU 上报 /vcu_drive_mode=2
+   -> VcuDriveModeListener 回调:
+      setSavedDrvModeReq(current_drv_mode_req_)
+      setRemoteControlSnapshot(work_state, pose)
+      setRemoteControlActive(true)
+      setState(REMOTE_CONTROL)
+   -> 不发任何请求
+
+2. VCU 上报 /vcu_drive_mode=1
+   -> VcuDriveModeListener 回调:
+      setRemoteControlActive(false)
+      setRemoteControlRecovering(true)
+   -> 不发任何请求
+
+3. 外部调用 /taskoverstop(mode=0 或 1)
+   -> takeoverStopCallback:
+      setPendingTakeoverMode(mode)
+   -> RecoverFromRemoteControl.onRunning 检测到 mode:
+      - mode=0: beginDrvModeConfirm(saved_drv_mode_req_) -> 200ms x 5 发 /ACU_DrvModeReq
+      - mode=1: 发 taskID=0 到 /task_ctrl (planner 进入停车模式)
+                等 /vehicle/task_status 状态=1 (空闲)
+                beginDrvModeConfirm(saved_drv_mode_req_) -> 200ms x 5 发 /ACU_DrvModeReq
+   -> setRemoteControlRecovering(false)
+   -> clearRemoteControlSnapshot()
+   -> setState(snapshot_state_)
+```
+
+---
+
 ## 2026-05-12: 完善工作状态控制与行为树停止逻辑
 
 ### 需求

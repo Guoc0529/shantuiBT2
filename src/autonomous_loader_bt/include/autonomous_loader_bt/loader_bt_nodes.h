@@ -185,6 +185,24 @@ public:
     void setRemoteControlRecovering(bool recovering);
     bool isRemoteControlRecovering() const;
 
+    // ===== 驾驶模式 (/ACU_DrvModeReq) 确认相关 API =====
+    void beginDrvModeConfirm(int target_mode);
+    void stopDrvModeConfirm();
+    void setCurrentDrvModeReq(int mode);
+    int  getCurrentDrvModeReq() const;
+    void setSavedDrvModeReq(int mode);
+    int  getSavedDrvModeReq() const;
+    bool isDrvModeConfirming() const;
+    int  getPendingDrvModeReq() const;
+    int  getDrvModeConfirmCount() const;
+    ros::Time getDrvModeConfirmStartTime() const;
+    void incrementDrvModeConfirmCount();
+
+    // ===== /taskoverstop 服务相关 API =====
+    // mode: -1=未触发, 0=恢复任务, 1=取消任务
+    void setPendingTakeoverMode(int mode);
+    int  getPendingTakeoverMode() const;
+
 private:
     GlobalState() = default;
     mutable std::mutex mutex_;
@@ -248,6 +266,17 @@ private:
     bool has_remote_control_snapshot_ = false;  // 是否有遥控接管前的快照
     int snapshot_work_state_ = 1;  // 遥控接管前的工作状态
     geometry_msgs::PoseStamped snapshot_pose_;  // 遥控接管前的位置快照
+
+    // 驾驶模式确认状态 (/ACU_DrvModeReq)
+    int current_drv_mode_req_ = 0;       // 订阅回读
+    int saved_drv_mode_req_ = 0;         // 进入遥控时记录
+    int pending_drv_mode_req_ = 0;       // 连发目标
+    bool drv_mode_confirming_ = false;   // 是否在连发
+    int drv_mode_confirm_count_ = 0;     // 已发次数
+    ros::Time drv_mode_confirm_start_time_;  // 连发起始时间
+
+    // /taskoverstop 服务触发标志: -1=未触发, 0=恢复, 1=取消
+    int pending_takeover_mode_ = -1;
 
     // Current task ID for status reporting
     std::atomic<int> current_task_id_{-1};
@@ -530,6 +559,23 @@ public:
     SetWorkState(const std::string& name, const BT::NodeConfiguration& config) : BT::SyncActionNode(name, config) {}
     static BT::PortsList providedPorts() { return { BT::InputPort<int>("value") }; }
     BT::NodeStatus tick() override;
+};
+
+class ShiftToNeutralGear : public BT::SyncActionNode
+{
+public:
+    ShiftToNeutralGear(const std::string& name, const BT::NodeConfiguration& config)
+        : BT::SyncActionNode(name, config), nh_("~")
+    {
+        drv_gear_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_DrvGear", 1, true);
+    }
+    static BT::PortsList providedPorts() {
+        return { BT::InputPort<int>("count", 5, "How many times to publish N gear (2)") };
+    }
+    BT::NodeStatus tick() override;
+private:
+    ros::NodeHandle nh_;
+    ros::Publisher drv_gear_pub_;
 };
 
 // ===== 避障相关节点 =====
@@ -991,13 +1037,20 @@ public:
     BT::NodeStatus tick() override;
 private:
     void driveModeCallback(const std_msgs::UInt8::ConstPtr& msg);
+    void drvModeReqCallback(const std_msgs::UInt8::ConstPtr& msg);
+    void drvModeConfirmTimerCb(const ros::TimerEvent&);
+
     ros::NodeHandle nh_;
     ros::Subscriber vcu_drive_mode_sub_;
+    ros::Subscriber drv_mode_req_sub_;
+    ros::Publisher  drv_mode_req_pub_;
+    ros::Timer      drv_mode_confirm_timer_;
+
     int current_drive_mode_;
     ros::Time last_drive_mode_time_;
 };
 
-// 遥控接管时保存快照并发送急停
+// 遥控接管时保存快照（不发急停，由 VcuDriveModeListener 回调内统一处理）
 class SaveRemoteControlSnapshot : public BT::SyncActionNode
 {
 public:
@@ -1006,7 +1059,6 @@ public:
     BT::NodeStatus tick() override;
 private:
     ros::NodeHandle nh_;
-    ros::Publisher estop_pub_;
 };
 
 // 遥控接管恢复检测
@@ -1019,29 +1071,25 @@ public:
 };
 
 // 遥控接管恢复动作
+// 流程: 永久等待 /taskoverstop 服务, mode=0 恢复任务, mode=1 取消任务
 class RecoverFromRemoteControl : public BT::StatefulActionNode
 {
 public:
     RecoverFromRemoteControl(const std::string& name, const BT::NodeConfiguration& config);
-    static BT::PortsList providedPorts()
-    {
-        return { BT::InputPort<double>("timeout", 30.0, "恢复超时时间（秒）") };
+    static BT::PortsList providedPorts() {
+        return { BT::InputPort<int>("timeout", 30, "Max seconds to wait before auto-recovery") };
     }
     BT::NodeStatus onStart() override;
     BT::NodeStatus onRunning() override;
     void onHalted() override;
 private:
     ros::NodeHandle nh_;
-    ros::Publisher estop_pub_;
     ros::Publisher task_ctrl_pub_;
     ros::Subscriber task_status_sub_;
     ros::Time start_time_;
-    double timeout_s_ = 30.0;
-    bool position_ok_ = false;
     bool vehicle_idle_ = false;
     bool task_canceled_ = false;
-    bool estop_released_ = false;
-    int snapshot_state_ = 1;
+    int  snapshot_state_ = 1;
 
     void taskStatusCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
 };

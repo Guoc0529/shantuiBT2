@@ -5,8 +5,6 @@
 #include <cstdint>
 
 #include <actionlib/server/simple_action_server.h>
-#include <diagnostic_msgs/DiagnosticArray.h>
-#include <diagnostic_msgs/DiagnosticStatus.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Path.h>
@@ -41,7 +39,6 @@ namespace jhzx::center_articulation_planner
     void publishIsForward(bool is_forward);
     void publishIsUnload(bool is_unload);
     void publishBrake(std::uint8_t value);
-    void publishDriveMode(std::uint8_t value);
     void publishControllerStarted(bool started);  // controller_started command (true=enable, false=stop)
     void publishActionFeedback(double distance, bool plan_succeeded = false);
     bool callAlignInPlace(bool use_rear_pose_source, float target_angle);
@@ -53,8 +50,6 @@ namespace jhzx::center_articulation_planner
     void startMovingTimer();
     void stopMovingTimer();
     void shutdownMapSubscription();
-    void setDiagnosticOk(const std::string &message = "OK");
-    void setDiagnosticError(const std::string &error_code, const std::string &message);
     void publishActionResult(bool success,
                              double final_distance_error = 0.0,
                              double final_angle_error = 0.0,
@@ -68,7 +63,6 @@ namespace jhzx::center_articulation_planner
     void setupServices();
     void setupTimers();
     void setupActionServer();
-    void diagnosticTimerCallback(const ros::TimerEvent &event);
 
     void timerCallback(const ros::TimerEvent &event);
     void movingTimerCallback(const ros::TimerEvent &event);
@@ -94,15 +88,6 @@ namespace jhzx::center_articulation_planner
 
     ros::Timer timer_;
     ros::Timer moving_timer_;
-    ros::Timer diag_timer_;
-
-    struct ModuleHealth
-    {
-      int level{diagnostic_msgs::DiagnosticStatus::OK};
-      std::string message{"OK"};
-      std::string error_code{"0"};
-      ros::Time last_update;
-    } health_;
 
     ros::Subscriber sub_goal_;
     ros::Subscriber sub_reach_;
@@ -130,13 +115,9 @@ namespace jhzx::center_articulation_planner
     ros::Publisher brake_pub_;
     ros::Publisher is_unload_pub_;
     ros::Publisher controller_started_pub_;  // controller_started command publisher
-    ros::Publisher drive_mode_pub_;          // drive_mode request publisher (inter-segment)
-    ros::Publisher diag_pub_;
 
     std::string planner_goal_topic_{"/planner_goal"};
 
-    std::string diagnostic_topic_{"/diagnostics"};
-    std::string diagnostic_name_{"Center Articulation Planner"};
     std::string plan_service_start_topic_{"/plan_service_start"};
     std::string plan_service_goal_topic_{"/plan_service_goal"};
     std::string map_topic_{"/map"};
@@ -156,7 +137,6 @@ namespace jhzx::center_articulation_planner
     std::string shache_topic_{"/shache"};
     std::string is_unload_topic_{"/is_unload"};
     std::string controller_started_topic_{"/controller_started"};  // controller_started topic
-    std::string drive_mode_topic_{"/ACU_DrvModeReq"};  // drive_mode request topic (inter-segment)
     std::string pile_info_service_{"/pileVolume"};  // 新增：料堆信�?service
     std::string align_in_place_service_{"/align_in_place"};
     std::string action_name_{"navigate"};
@@ -167,5 +147,6 @@ namespace jhzx::center_articulation_planner
   };
 
 } // namespace jhzx::center_articulation_planner
+
 
 

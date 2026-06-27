@@ -372,6 +372,7 @@
 
                                         <!-- 完成任务 -->
                                         <SetWorkState value="8"/>
+                                        <ShiftToNeutralGear/>
                                         <Script code="arm_on_ground:=true"/>
                                         <UpdateTaskProgress name="StopProgress" phase="stopped" progress="100.0" message="Mission ended, returned to park and reset."/>
 
@@ -675,6 +676,7 @@
                                 -->
                                 <Sequence name="SEQ_AFTER_CYCLE_DONE">
                                     <SetWorkState value="8"/>
+                                    <ShiftToNeutralGear/>
                                     <!-- 延迟一秒 -->
                                     <Sleep msec="1000"/>
                                     <SetWorkState value="1"/>

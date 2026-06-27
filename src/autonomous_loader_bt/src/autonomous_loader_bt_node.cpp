@@ -8,6 +8,7 @@
 #include <std_msgs/Bool.h>
 #include <std_msgs/Int8.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/UInt8.h>
 #include <cstdlib>
 #include <unistd.h>
 #include <cmath>
@@ -18,6 +19,7 @@
 #include "autonomous_loader_bt/ros_topic_manager.h"
 #include "shuju/cangdou.h"
 #include "shuju/taskcontrol.h"
+#include "shuju/takeoverstop.h"
 #include <stdexcept> // 用于 std::runtime_error
 
 using namespace autonomous_loader_bt;
@@ -214,6 +216,8 @@ private:
         status_pub_ = nh_.advertise<std_msgs::String>("state_machine/status", 10);
         workstate_pub_ = nh_.advertise<std_msgs::Int8>("/workstate", 10);
         task_id_pub_ = nh_.advertise<std_msgs::Int32>("/current_task_id", 1, true); // Latching publisher
+        estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
+        drv_gear_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_DrvGear", 1, true);
         
         // 订阅者
         start_task_sub_ = nh_.subscribe("scheduler/start_task", 10, &AutonomousLoaderBTNode::startTaskCallback, this);
@@ -223,6 +227,12 @@ private:
         // TaskCtrl 服务 (ctrlCmd: 1=开始任务, 2=远程接管, 3=避障停车, 4=急停, 5=继续, 6=结束)
         task_ctrl_service_ = nh_.advertiseService("/task_control_srv", &AutonomousLoaderBTNode::taskCtrlServiceCallback, this);
         ROS_INFO("\033[36m[BT]\033[0m Advertised service /task_control_srv for task control commands");
+
+        // /taskoverstop 服务 - 遥控恢复决策
+        //   mode=0: 恢复之前任务
+        //   mode=1: 取消当前任务 (发 taskID=0 到 /task_ctrl)
+        takeover_stop_service_ = nh_.advertiseService("/taskoverstop", &AutonomousLoaderBTNode::takeoverStopCallback, this);
+        ROS_INFO("\033[36m[BT]\033[0m Advertised service /taskoverstop for remote recovery decision");
 
         // 避障相关话题订阅
         obstacle_1_sub_ = nh_.subscribe("/obstacle_1", 10, &AutonomousLoaderBTNode::obstacle1Callback, this);
@@ -411,6 +421,15 @@ private:
         ROS_INFO("\033[36m[BT]\033[0m Received end task command: %s", msg->data ? "yes" : "no");
     }
 
+    bool takeoverStopCallback(shuju::takeoverstop::Request& req, shuju::takeoverstop::Response& res)
+    {
+        // mode=0: 恢复之前任务; mode=1: 取消当前任务
+        autonomous_loader_bt::GlobalState::getInstance().setPendingTakeoverMode(req.mode);
+        res.success = true;
+        ROS_WARN("\033[33m[BT]\033[0m /taskoverstop received, mode=%d (0=恢复, 1=取消)", req.mode);
+        return true;
+    }
+
     bool taskCtrlServiceCallback(shuju::taskcontrol::Request& req, shuju::taskcontrol::Response& res)
     {
         ROS_INFO("\033[33m[TaskCtrl]\033[0m Received: taskID=%d, ctrlCmd=%d",
@@ -469,26 +488,43 @@ private:
                 }
                 break;
 
-            case 4:  // 紧急停车
-                gs.setEmergencyStop(true);
-                gs.setPauseTask(true);
-                gs.setHaltRequested(true);
-                TaskStatusReporter::instance().setState(TaskStatusReporter::EMERGENCY_STOP);
-                res.taskCtrlSuccess = true;
-                ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=4: Emergency stop - halt BT, set state=4");
+            case 4:  // 急停
+                {
+                    std_msgs::UInt8 estop_msg;
+                    estop_msg.data = 1;
+                    for (int i = 0; i < 5; ++i) estop_pub_.publish(estop_msg);
+                    TaskStatusReporter::instance().setState(TaskStatusReporter::EMERGENCY_STOP);
+                    res.taskCtrlSuccess = true;
+                    ROS_WARN("\033[31m[TaskCtrl]\033[0m ctrlCmd=4: Emergency stop SENT (ACU_EStop=1 x5), state=4");
+                }
                 break;
 
-            case 5:  // 继续任务
+            case 5:  // 解除急停或解除避障
                 {
-                    gs.setPauseTask(false);
-                    gs.setEmergencyStop(false);
-                    gs.clearHaltRequested();
-                    gs.setRestoreRequested(true);
-                    gs.setObstacleFromCtrl3(false);
-                    gs.setObstacleCtrl3Immediate(false);
-                    gs.setObstacleCtrl3Acknowledged(false);
+                    auto& gs = GlobalState::getInstance();
+                    int cur_state = TaskStatusReporter::instance().getState();
+
+                    std_msgs::UInt8 estop_msg;
+                    estop_msg.data = 0;
+                    for (int i = 0; i < 5; ++i) estop_pub_.publish(estop_msg);
+
+                    if (cur_state == TaskStatusReporter::EMERGENCY_STOP) {
+                        gs.setEmergencyStop(false);
+                        ROS_WARN("\033[31m[TaskCtrl]\033[0m ctrlCmd=5: Emergency stop RELEASED (ACU_EStop=0 x5), state=4->1");
+                    } else if (cur_state == TaskStatusReporter::OBSTACLE_STOP) {
+                        gs.setPauseTask(false);
+                        gs.setEmergencyStop(false);
+                        gs.clearHaltRequested();
+                        gs.setRestoreRequested(true);
+                        gs.setObstacleFromCtrl3(false);
+                        gs.setObstacleCtrl3Immediate(false);
+                        gs.setObstacleCtrl3Acknowledged(false);
+                        publishNGear();
+                        ROS_WARN("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Obstacle stop RELEASED (ACU_EStop=0 x5, N gear x5), state=5->1");
+                    }
+
+                    TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
                     res.taskCtrlSuccess = true;
-                    ROS_INFO("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Resume task - sent restore signal to BT");
                 }
                 break;
 
@@ -652,6 +688,14 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
         return true;
     }
 
+    void publishNGear()
+    {
+        std_msgs::UInt8 gear_msg;
+        gear_msg.data = 2;  // 2 = N 档
+        for (int i = 0; i < 5; ++i) drv_gear_pub_.publish(gear_msg);
+        ROS_WARN("\033[36m[BT]\033[0m publishNGear: ACU_DrvGear=2 (N gear) x5");
+    }
+
     ros::NodeHandle& nh_;
     BT::Tree tree_;
     ros::Timer timer_;
@@ -670,6 +714,10 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
     
     ros::ServiceServer task_service_;
     ros::ServiceServer task_ctrl_service_;
+    ros::ServiceServer takeover_stop_service_;
+
+    ros::Publisher estop_pub_;
+    ros::Publisher drv_gear_pub_;
     
     std::unique_ptr<BT::StdCoutLogger> console_logger_;
     std::unique_ptr<BT::FileLogger2> file_logger_;

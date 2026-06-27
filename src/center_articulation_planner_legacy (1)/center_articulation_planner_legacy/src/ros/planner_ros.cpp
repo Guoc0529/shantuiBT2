@@ -129,8 +129,6 @@ namespace jhzx::center_articulation_planner
 {
   void PlannerROS::initialize(ros::NodeHandle &nh, ros::NodeHandle &pnh)
   {
-    nh_ = nh;
-    pnh_ = pnh;
     pnh.param<std::string>("plan_service", plan_service_name_, plan_service_name_);
     pnh.param<std::string>("set_params_service", set_params_service_name_, set_params_service_name_);
     pnh.param("planner_service_timeout", planner_service_timeout_, planner_service_timeout_);
@@ -188,45 +186,6 @@ namespace jhzx::center_articulation_planner
       if (!nav_path_.empty() && ros_io_)
       {
         ros_io_->publishSegmentedPath(nav_path_.front());
-      }
-      // 中转点切换 drive_mode + brake（一次性流水线）
-      if (need_inter_segment_drive_mode_switch_)
-      {
-        // Step 1: drive_mode=2，连发 5 次
-        for (int i = 0; i < 5; ++i)
-        {
-          ros_io_->publishDriveMode(2);
-        }
-        ROS_INFO("Inter-segment: drive_mode=2 x5 sent");
-
-        // Step 2: brake=30%，发 5 次
-        for (int i = 0; i < 5; ++i)
-        {
-          ros_io_->publishBrake(kBrake30Percent);
-        }
-        ROS_INFO("Inter-segment: brake=%u (30%%) x5 sent",
-                 static_cast<unsigned>(kBrake30Percent));
-
-        // Step 3: 0 秒等待，直接走下一步
-
-        // Step 4: drive_mode=1，连发 5 次
-        for (int i = 0; i < 5; ++i)
-        {
-          ros_io_->publishDriveMode(1);
-        }
-        ROS_INFO("Inter-segment: drive_mode=1 x5 sent");
-
-        // Step 5: brake=0，发 5 次
-        for (int i = 0; i < 5; ++i)
-        {
-          ros_io_->publishBrake(kBrakeRelease);
-        }
-        ROS_INFO("Inter-segment: brake=%u (release) x5 sent",
-                 static_cast<unsigned>(kBrakeRelease));
-
-        // 消费完毕，清标志
-        need_inter_segment_drive_mode_switch_ = false;
-        inter_segment_brake_engaged_ = false;
       }
       // 调整车辆当前状态适配前进还是后退
       ROS_INFO_THROTTLE(3.0, "Adjusting vehicle direction...");
@@ -305,11 +264,17 @@ namespace jhzx::center_articulation_planner
       }
 
       // 两个goal都收到，且都成功
-      if (reach_goal_received_ && final_goal_received_ && final_goal_ok_)
-      {
-        transitionToCompletedOrBackout("goal and final goal confirmed");
-        break;
-      }
+      // if (reach_goal_received_ && final_goal_received_ && final_goal_ok_)
+      // {
+      //   transitionToCompletedOrBackout("goal and final goal confirmed");
+      //   break;
+      // }
+
+      // if (reach_goal_received_ && final_goal_ok_)
+      // {
+      //   transitionToCompletedOrBackout("goal and final goal confirmed");
+      //   break;
+      // }
 
       // timeout
       const double elapsed = (ros::Time::now() - checking_goal_start_time_).toSec();
@@ -319,6 +284,9 @@ namespace jhzx::center_articulation_planner
         final_error_code_ = static_cast<std::uint8_t>(ErrorCode::FinalGoalCheckFailed);
         final_error_msg_ = "timeout waiting for goal_reached/final_goal_reached";
         transitionTo(PlannerState::Error, final_error_msg_);
+
+        ROS_INFO_THROTTLE(1.0, "DU:reach = %d ,final = %d ,ok = %d elapsed = %.2f",reach_goal_received_,final_goal_received_,final_goal_ok_,elapsed);
+        
         break;
       }
       ROS_INFO_THROTTLE(2.0,
@@ -710,11 +678,6 @@ namespace jhzx::center_articulation_planner
     }
 
     // 【优化】离开Moving状态时，确保发布controller_started=false
-    if (next_state != PlannerState::Error && ros_io_)
-    {
-      ros_io_->setDiagnosticOk(plannerStateToString(next_state));
-    }
-
     if (previous == PlannerState::Moving && next_state != PlannerState::Moving)
     {
       if (ros_io_)
@@ -787,33 +750,13 @@ namespace jhzx::center_articulation_planner
     {
       final_error_msg_ = base_msg + ": " + detail;
     }
-
-    if (ros_io_)
-    {
-      switch (code)
-      {
-      case ErrorCode::PlanFailed:
-        ros_io_->setDiagnosticError("7101", final_error_msg_);
-        break;
-      case ErrorCode::BackendNull:
-      case ErrorCode::PlanServiceUnavailable:
-        ros_io_->setDiagnosticError("7102", final_error_msg_);
-        break;
-      case ErrorCode::NoDistanceFeedback:
-        ros_io_->setDiagnosticError("7103", final_error_msg_);
-        break;
-      default:
-        break;
-      }
-    }
-
     transitionTo(PlannerState::Error, final_error_msg_);
   }
 
   // 规划、获取、分段路�?
   void PlannerROS::planning_global_path()
   {
-    if (!planner_backend_)
+    if (!planner_backend_)  //规划service的client对象没实例化
     {
       ROS_ERROR("Remote planner backend is not initialized.");
       if (ros_io_)
@@ -824,15 +767,17 @@ namespace jhzx::center_articulation_planner
       return;
     }
 
-    geometry_msgs::PoseStamped plan_start = current_pose_;
+    geometry_msgs::PoseStamped plan_start = current_pose_; // 给起点位姿赋�?
+
+    // 特殊情况1
     bool using_front_offset = false;
-    if (use_offset_front_at_unload_start_)
+    if (use_offset_front_at_unload_start_)   // 如果是卸�?铲料
     {
-      if (!makeOffsetStartFromFront(1.2, plan_start))
+      if (!makeOffsetStartFromFront(1.2, plan_start))  // 在规划前把起点从当前车位偏到前车架后�?1.2 m
       {
         if (ros_io_)
         {
-          ros_io_->publishActionFeedback(999.0, false);
+          ros_io_->publishActionFeedback(999.0, false);  // 没有前车架位�?
         }
         return;
       }
@@ -844,9 +789,56 @@ namespace jhzx::center_articulation_planner
              tf2::getYaw(plan_start.pose.orientation),
              static_cast<int>(using_front_offset));
 
-    goal_adjusted_for_pile_ = false;
-    bool goal_adjusted_for_pile = false;
-    geometry_msgs::PoseStamped plan_goal = buildPlanGoal(goal_adjusted_for_pile);
+    geometry_msgs::PoseStamped plan_goal = current_goal_pose_;
+
+    // 特殊情况2
+    if (current_task_ == TaskType::NormalUnload || current_task_ == TaskType::InitialUnload)  // 仅在卸料�?
+    {
+      plan_goal.pose.position.x += unload_goal_offset_x_m_;  // 卸料目标向外偏移，保证最后一段更直
+      plan_goal.header.stamp = ros::Time::now();
+    }
+
+    // ============================================================
+    // 【新增】特殊情�?：铲料点根据料堆余料调整终点
+    // ============================================================
+    goal_adjusted_for_pile_ = false;  // 重置标志�?
+
+    // 判断是否是铲料任务（current_status == 0�?
+    if (current_status_ == 0)  // 0 表示铲料�?
+    {
+      // 使用 current_id_ 查询料堆余料
+      if (ros_io_)
+      {
+        const int volume = ros_io_->getPileVolume(current_id_);
+
+        if (volume >= 0 && volume < pile_low_threshold_percent_)
+        {
+          // Pile volume below threshold, shift goal in -x direction
+          const double original_x = plan_goal.pose.position.x;
+          plan_goal.pose.position.x -= pile_low_offset_x_m_;
+          plan_goal.header.stamp = ros::Time::now();
+          goal_adjusted_for_pile_ = true;
+
+          // 详细日志：记录料堆余料和终点调整
+          ROS_INFO("Pile %u volume low (%d%% < %d%%), adjusted goal x: %.2f -> %.2f (offset %.2fm)",
+                   static_cast<unsigned>(current_id_),
+                   volume,
+                   pile_low_threshold_percent_,
+                   original_x,
+                   plan_goal.pose.position.x,
+                   plan_goal.pose.position.x - original_x);
+        }
+        else if (volume >= pile_low_threshold_percent_)
+        {
+          ROS_INFO("Pile %u volume sufficient (%d%% >= %d%%), using original goal (x=%.2f)",
+                   static_cast<unsigned>(current_id_),
+                   volume,
+                   pile_low_threshold_percent_,
+                   plan_goal.pose.position.x);
+        }
+        // volume < 0 表示查询失败或超时，使用原始终点
+      }
+    }
 
     if (ros_io_)
     {
@@ -862,91 +854,84 @@ namespace jhzx::center_articulation_planner
     const int8_t task_type = remotePlannerTaskType();
 
     PlanAttemptResult best_attempt;
-    PlanAttemptResult primary_attempt = runPlanAttempt(plan_start, plan_goal, "primary", task_type);
-    if (primary_attempt.success)
+    PlanAttemptResult primary_attempt = runPlanAttempt(plan_start, plan_goal, "primary", task_type);  // 首次规划尝试
+    if (primary_attempt.success)  // 首次规划成功，不会向后退�?
     {
-      best_attempt = std::move(primary_attempt);
+      best_attempt = std::move(primary_attempt);  // 类型转换标记
     }
     else
     {
-      ROS_WARN("Primary planning failed (%s).", primary_attempt.message.c_str());
-
-      if (isUnloadTask())
+      ROS_WARN("Primary planning failed (%s); trying fallback offsets toward articulation center.",
+               primary_attempt.message.c_str());
+      geometry_msgs::PoseStamped offset_start;  // 用于fallback的偏置起�?
+      if (makeOffsetStartTowardCenter(1.5, offset_start))  // 将起点向铰接中心移动
       {
-        ROS_WARN("Trying unload swapped start-goal fallback before offset-based fallbacks.");
-        PlanAttemptResult swapped_attempt =
-            runPlanAttempt(plan_goal, plan_start, "fallback_unload_swap_start_goal", task_type);
-        if (swapped_attempt.success)
+        const double yaw_step = M_PI / 9.0; // 20 degrees
+        const std::array<double, 3> yaw_offsets{{0.0, yaw_step, -yaw_step}};
+        for (const double yaw_delta : yaw_offsets)  // 在偏置起点，�?个yaw规划
         {
-          reversePlanForTracking(swapped_attempt);
-          best_attempt = std::move(swapped_attempt);
-          ROS_INFO("Planning succeeded with unload swapped start-goal fallback.");
-        }
-        else
-        {
-          ROS_WARN("Unload swapped start-goal fallback failed: %s", swapped_attempt.message.c_str());
-        }
-      }
-
-      if (!best_attempt.success)
-      {
-        ROS_WARN("Trying fallback offsets toward articulation center.");
-        geometry_msgs::PoseStamped offset_start;
-        if (makeOffsetStartTowardCenter(1.5, offset_start))
-        {
-          const double yaw_step = M_PI / 9.0;
-          const std::array<double, 3> yaw_offsets{{0.0, yaw_step, -yaw_step}};
-          for (const double yaw_delta : yaw_offsets)
+          geometry_msgs::PoseStamped candidate_start = yawOffsetPose(offset_start, yaw_delta);
+          const char *yaw_label = (std::abs(yaw_delta) < 1e-6) ? "0deg" : (yaw_delta > 0.0 ? "+20deg" : "-20deg");
+          std::string tag = std::string("fallback_offset_") + yaw_label;
+          PlanAttemptResult attempt = runPlanAttempt(candidate_start, plan_goal, tag, task_type);   // 尝试
+          if (!attempt.success)
           {
-            geometry_msgs::PoseStamped candidate_start = yawOffsetPose(offset_start, yaw_delta);
-            const char *yaw_label = (std::abs(yaw_delta) < 1e-6) ? "0deg" : (yaw_delta > 0.0 ? "+20deg" : "-20deg");
-            std::string tag = std::string("fallback_offset_") + yaw_label;
-            PlanAttemptResult attempt = runPlanAttempt(candidate_start, plan_goal, tag, task_type);
-            if (!attempt.success)
-            {
-              ROS_WARN("Plan attempt %s failed: %s", tag.c_str(), attempt.message.c_str());
-              continue;
-            }
-            if (!best_attempt.success || attempt.total_length < best_attempt.total_length)
-            {
-              best_attempt = std::move(attempt);
-            }
+            ROS_WARN("Plan attempt %s failed: %s", tag.c_str(), attempt.message.c_str());
+            continue;
+          }
+          if (!best_attempt.success || attempt.total_length < best_attempt.total_length)  // 三次尝试中选择总路径长度最小的
+          {
+            best_attempt = std::move(attempt);
           }
         }
-        else
-        {
-          ROS_WARN("Failed to compute offset start pose for fallback planning.");
-        }
+      }
+      else
+      {
+        ROS_WARN("Failed to compute offset start pose for fallback planning.");
       }
     }
 
-    if (!best_attempt.success)
+    if (!best_attempt.success)  // 如果所有的fallback都失败了
     {
-      ROS_WARN("All swap/offset fallbacks failed, trying with increased direction switches (2)...");
+      // ============================================================
+      // 【Fallback】最后的尝试增加换向次�?
+      // ============================================================
+      // 什么时候会执行到这里？
+      // - Primary 规划失败
+      // - 3 �?yaw 偏移�?fallback 也全部失�?
+      //
+      // 为什么要增加换向次数�?
+      // - 有些复杂场景下，1 次换向无法到达目�?
+      // - 允许 2 次换向可能可以找到可行路�?
+      // - 但换向次数多会影响效率，所以只作为最后手�?
+      // ============================================================
+      ROS_WARN("All offset fallbacks failed, trying with increased direction switches (2)...");
 
       PlanAttemptResult increased_switch_attempt =
           tryPlanWithIncreasedSwitches(plan_start, plan_goal, task_type);
 
       if (increased_switch_attempt.success)
       {
+        // 使用增加换向次数的规划结�?
         best_attempt = std::move(increased_switch_attempt);
         ROS_INFO("Planning succeeded with increased direction switches (max_switches=2)");
       }
       else
       {
+        // 真的全部失败了，报错
         ROS_ERROR("All planning attempts failed (including increased direction switches)");
         if (ros_io_)
         {
           ros_io_->publishActionFeedback(999.0, false);
         }
-        const std::string detail =
-            primary_attempt.message.empty() ? "all planning attempts failed" : primary_attempt.message;
-        setError(primary_attempt.error_code, detail);
+        const ErrorCode code = primary_attempt.success ? ErrorCode::PlanFailed : primary_attempt.error_code;
+        const std::string detail = primary_attempt.message.empty() ? "all planning attempts failed" : primary_attempt.message;
+        setError(code, detail);  // 报失�?
         return;
       }
     }
 
-    if (best_attempt.tag != "primary")
+    if (best_attempt.tag != "primary")   // 如果不是主规划路径，报一个warning
     {
       ROS_WARN("Using fallback plan '%s' (total length=%.2f m)",
                best_attempt.tag.c_str(),
@@ -957,28 +942,138 @@ namespace jhzx::center_articulation_planner
       ROS_INFO("Primary plan selected (total length=%.2f m)", best_attempt.total_length);
     }
 
-    const std::string selected_tag = best_attempt.tag;
-    const double planning_time_sec = best_attempt.planning_time_sec;
-    applyPlanAttempt(std::move(best_attempt), goal_adjusted_for_pile, true);
+    global_path_ = std::move(best_attempt.global_path);
+    nav_path_ = std::move(best_attempt.nav_segments);
+    segment_backward_flags_ = std::move(best_attempt.backward_flags);
+    segment_lengths_ = std::move(best_attempt.segment_lengths);
+    total_segments_ = nav_path_.size();
 
-    if (planning_time_sec > 0.0)
+    // 打印各段debug
+    // for (bool flag : segment_backward_flags_) {
+    //     std::cout << flag << " ";
+    // }
+    // std::cout << std::endl;
+
+    if (ros_io_)
     {
-      ROS_INFO_STREAM("Remote planner succeeded in " << planning_time_sec << "s ("
-                                                     << selected_tag << ")");
+      ros_io_->publishGlobalPath(global_path_);  // 测试用，将规划的全局路径发布出去
+    }
+
+    // 卸料任务：把原始终点补回全局/分段路径末尾，便于最终对齐卸料点
+    if ((current_task_ == TaskType::NormalUnload || current_task_ == TaskType::InitialUnload) &&
+        !nav_path_.empty())
+    {
+      // 补回原始终点并加密处理：从偏置终点到真终点按步长线性插点
+      geometry_msgs::PoseStamped original_goal = current_goal_pose_;
+      original_goal.header.stamp = ros::Time::now();
+      if (!global_path_.header.frame_id.empty())
+      {
+        original_goal.header.frame_id = global_path_.header.frame_id;
+      }
+      else if (!nav_path_.back().header.frame_id.empty())
+      {
+        original_goal.header.frame_id = nav_path_.back().header.frame_id;
+      }
+
+      const auto appendDensifiedGoalTail = [](nav_msgs::Path &path,
+                                              const geometry_msgs::PoseStamped &goal,
+                                              double step_m) -> std::size_t {
+        if (path.poses.empty())
+        {
+          path.poses.push_back(goal);
+          return 1;
+        }
+
+        const geometry_msgs::PoseStamped &start = path.poses.back();
+        const double dx = goal.pose.position.x - start.pose.position.x;
+        const double dy = goal.pose.position.y - start.pose.position.y;
+        const double dist = std::hypot(dx, dy);
+        if (dist < 1e-6)
+        {
+          path.poses.push_back(goal);
+          return 1;
+        }
+
+        const auto wrapYaw = [](double yaw) {
+          return std::atan2(std::sin(yaw), std::cos(yaw));
+        };
+        const double yaw_start = wrapYaw(tf2::getYaw(start.pose.orientation));
+        const double yaw_goal = wrapYaw(tf2::getYaw(goal.pose.orientation));
+        const double dyaw = wrapYaw(yaw_goal - yaw_start);
+        const int intervals = std::max(1, static_cast<int>(std::ceil(dist / step_m)));
+
+        std::size_t added = 0;
+        for (int i = 1; i <= intervals; ++i)
+        {
+          const double t = static_cast<double>(i) / static_cast<double>(intervals);
+          geometry_msgs::PoseStamped ps = goal;
+          ps.header.stamp = ros::Time::now();
+          ps.pose.position.x = start.pose.position.x + t * dx;
+          ps.pose.position.y = start.pose.position.y + t * dy;
+          ps.pose.position.z = 0;
+          const double yaw = wrapYaw(yaw_start + t * dyaw);
+          tf2::Quaternion q;
+          q.setRPY(0, 0, yaw);
+          ps.pose.orientation = tf2::toMsg(q);
+          path.poses.push_back(ps);
+          ++added;
+        }
+        return added;
+      };
+
+      const double densify_step_m = (backout_step_m_ > 1e-3) ? backout_step_m_ : 0.2;
+      const std::size_t seg_added = appendDensifiedGoalTail(nav_path_.back(), original_goal, densify_step_m);
+      appendDensifiedGoalTail(global_path_, original_goal, densify_step_m);
+
+      if (!segment_lengths_.empty())
+      {
+        segment_lengths_.back() = computePathLength(nav_path_.back());
+      }
+
+      ROS_INFO_STREAM("Appended densified unload goal tail: added=" << seg_added
+                      << " points (step=" << densify_step_m << " m), goal x="
+                      << original_goal.pose.position.x << " y=" << original_goal.pose.position.y
+                      << " yaw=" << tf2::getYaw(original_goal.pose.orientation));
+    }
+
+    // ============================================================
+    // 【新增】铲料任务：补回原始终点（如果进行了调整�?
+    // ============================================================
+    if (goal_adjusted_for_pile_ && !nav_path_.empty())
+    {
+      geometry_msgs::PoseStamped original_goal = current_goal_pose_;
+      original_goal.header.stamp = ros::Time::now();
+      // 不需要微调，直接使用原始�?
+      global_path_.poses.push_back(original_goal);
+      nav_path_.back().poses.push_back(original_goal);
+
+      // 详细日志：记录补回的原始终点
+      ROS_INFO_STREAM("Appended original shovel goal to path tail: x="
+                      << original_goal.pose.position.x << " y="
+                      << original_goal.pose.position.y
+                      << " yaw=" << tf2::getYaw(original_goal.pose.orientation)
+                      << " (restored after pile adjustment)");
+    }
+
+    if (best_attempt.planning_time_sec > 0.0)
+    {
+      ROS_INFO_STREAM("Remote planner succeeded in " << best_attempt.planning_time_sec << "s ("
+                                                     << best_attempt.tag << ")");
     }
     armLastUnloadDistanceRefreshGate("planning produced single unload segment");
     armLastLoadDistanceRefreshGate("planning produced single load segment");
-    const std::string reason = selected_tag.empty() ? "global path ready"
-                                                    : "global path ready via " + selected_tag;
+    const std::string reason = best_attempt.tag.empty() ? "global path ready"
+                                                        : "global path ready via " + best_attempt.tag;
     transitionTo(PlannerState::AdjustingDirection, reason);
   }
 
+  // 输出是nav_path_，std::vector<nav_msgs::Path>
   bool PlannerROS::buildSegmentsFromPlan(const nav_msgs::Path &path,
                                          const std::vector<int8_t> &direction_flags,
                                          const std::vector<int32_t> &segment_starts,
                                          const std::vector<int32_t> &segment_ends)
   {
-    nav_path_.clear();
+    nav_path_.clear();  // 先清缓存
     segment_backward_flags_.clear();
     segment_lengths_.clear();
     return buildSegmentsFromPlan(path,
@@ -1176,30 +1271,6 @@ namespace jhzx::center_articulation_planner
     return (last_status_ == 0) ? 4 : 0;
   }
 
-  bool PlannerROS::isUnloadTask() const
-  {
-    return current_task_ == TaskType::NormalUnload ||
-           current_task_ == TaskType::InitialUnload;
-  }
-
-  void PlannerROS::reversePlanForTracking(PlanAttemptResult &attempt)
-  {
-    std::reverse(attempt.global_path.poses.begin(), attempt.global_path.poses.end());
-
-    for (auto &segment : attempt.nav_segments)
-    {
-      std::reverse(segment.poses.begin(), segment.poses.end());
-    }
-    std::reverse(attempt.nav_segments.begin(), attempt.nav_segments.end());
-
-    std::reverse(attempt.backward_flags.begin(), attempt.backward_flags.end());
-    for (std::size_t i = 0; i < attempt.backward_flags.size(); ++i)
-    {
-      attempt.backward_flags[i] = !attempt.backward_flags[i];
-    }
-
-    std::reverse(attempt.segment_lengths.begin(), attempt.segment_lengths.end());
-  }
   void PlannerROS::applyPlanAttempt(PlanAttemptResult attempt,
                                     bool goal_adjusted_for_pile,
                                     bool reset_segment_index)
@@ -1770,14 +1841,6 @@ namespace jhzx::center_articulation_planner
       unload_flag_sent_ = false;
       ROS_INFO("[BackoutUnload] seg1 done, reset unload_flag_sent_ for re-entry segment");
     }
-    // 中转点：非末段、非 backout 时触发 drive_mode+brake 切换流水线
-    // (parking 情况下走 reset 分支不会到这里，且 onReach 来自 Moving，状态对齐)
-    if (backout_retry_count_ == 0)
-    {
-      need_inter_segment_drive_mode_switch_ = true;
-      ROS_INFO("Inter-segment switch armed (segment_index=%zu -> %zu)",
-               segment_index_ - 1, segment_index_);
-    }
     transitionTo(PlannerState::AdjustingDirection, "next segment ready");
   }
 
@@ -1980,12 +2043,6 @@ namespace jhzx::center_articulation_planner
     checking_goal_start_time_ = ros::Time(0);
     use_offset_front_at_unload_start_ = false;
     brake_engaged_ = false;
-    need_inter_segment_drive_mode_switch_ = false;
-    inter_segment_brake_engaged_ = false;
-    if (inter_segment_settle_timer_.isValid())
-    {
-      inter_segment_settle_timer_.stop();
-    }
     unload_flag_sent_ = false;
     waiting_last_segment_distance_refresh_ = false;
     waiting_load_last_segment_distance_refresh_ = false;

@@ -4,7 +4,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   std_msgs
 )
-add_service_files(FILES cangdou.srv taskcontrol.srv)
+add_service_files(FILES cangdou.srv taskcontrol.srv takeoverstop.srv)
 add_message_files(FILES TaskCtrl.msg)
 generate_messages(DEPENDENCIES std_msgs)
 catkin_package(CATKIN_DEPENDS message_runtime std_msgs)
