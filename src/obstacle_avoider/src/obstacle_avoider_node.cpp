@@ -232,7 +232,9 @@ class ObstacleAvoider
 public:
     ObstacleAvoider() : nh_("~"),
         emergency_stop_hold_duration_(5.0),
-        emergency_stop_hold_time_(ros::Time())
+        emergency_stop_hold_time_(ros::Time()),
+        last_estop_published_(false),
+        estop_burst_count_(0)
     {
         loadParams();
         initLogging();
@@ -424,7 +426,7 @@ private:
     {
         // 0. 读取 /ArmBucketState，判断是否需要清空路径（在加锁前读取，避免死锁）
         int arm_bucket_state = 0;
-        ros::param::get("/ArmBucketState", arm_bucket_state);
+        ros::param::get("/autonomous_loader_bt/ArmBucketState", arm_bucket_state);
         if (last_workstate_ != -1 && (arm_bucket_state == 6 || arm_bucket_state == 7)) {
             ROS_WARN("[ObstacleAvoider] workstate changed to %d, will clear path.", arm_bucket_state);
             need_clear_path_ = true;
@@ -434,9 +436,8 @@ private:
         // 1. 获取数据
         data_mutex_.lock();
         if (need_clear_path_) {
-            if (!current_path_.poses.empty()) {
-                ROS_WARN("[ObstacleAvoider] Clearing path (was %zu poses).", current_path_.poses.size());
-            }
+            ROS_WARN("[ObstacleAvoider] Clearing path (was %zu poses) due to workstate=%d.",
+                     current_path_.poses.size(), arm_bucket_state);
             current_path_.poses.clear();
             current_path_.header.stamp = ros::Time::now();
             need_clear_path_ = false;
@@ -577,13 +578,26 @@ private:
             horn_final = true;
         }
 
-        // 8. 发布结果
+        // 8. Burst 发布：状态切换时只发 3 次
         std_msgs::UInt8 estop_msg;
         estop_msg.data = estop_final ? 1 : 0;
         std_msgs::UInt8 horn_msg;
         horn_msg.data = horn_final ? 1 : 0;
-        estop_pub_.publish(estop_msg);
-        horn_pub_.publish(horn_msg);
+
+        bool estop_changed = (estop_final != last_estop_published_);
+        if (estop_changed) {
+            last_estop_published_ = estop_final;
+            estop_burst_count_ = ESTOP_BURST_COUNT;
+            estop_pub_.publish(estop_msg);
+            horn_pub_.publish(horn_msg);
+            ROS_WARN("[E-Stop] %s (burst 1/%d)", estop_final ? "TRIGGERED" : "RELEASED", ESTOP_BURST_COUNT);
+        } else if (estop_burst_count_ > 0) {
+            estop_pub_.publish(estop_msg);
+            horn_pub_.publish(horn_msg);
+            ROS_WARN("[E-Stop] %s (burst %d/%d)", estop_final ? "TRIGGERED" : "RELEASED",
+                     ESTOP_BURST_COUNT - estop_burst_count_ + 1, ESTOP_BURST_COUNT);
+            estop_burst_count_--;
+        }
     }
 
     bool updateConfirmationCounter(const std::string& rule_type, int required_frames, int& counter,
@@ -800,6 +814,11 @@ private:
 
     // 急停保持机制
     ros::Time emergency_stop_hold_time_;   // Last e-stop trigger time
+
+    // 急停/解除 burst 发布：状态切换时只发 3 次
+    bool last_estop_published_ = false;
+    int estop_burst_count_ = 0;
+    static constexpr int ESTOP_BURST_COUNT = 3;
 
     std::mutex data_mutex_;
     nav_msgs::Path current_path_;

@@ -2169,6 +2169,9 @@ VcuDriveModeListener::VcuDriveModeListener(const std::string& name, const BT::No
 
     drv_mode_req_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_DrvModeReq", 10);
 
+    // 急停发布器: 在 VCU 退出遥控模式时主动发 5 次急停
+    estop_pub_ = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
+
     drv_mode_confirm_timer_ = nh_.createTimer(
         ros::Duration(0.2), &VcuDriveModeListener::drvModeConfirmTimerCb, this);
 
@@ -2179,30 +2182,61 @@ void VcuDriveModeListener::driveModeCallback(const std_msgs::UInt8::ConstPtr& ms
 {
     int drive_mode = msg->data;
     last_drive_mode_time_ = ros::Time::now();
-
-    bool was_active = GlobalState::getInstance().isRemoteControlActive();
-    bool now_active = (drive_mode == 2);  // 2=遥控模式
     current_drive_mode_ = drive_mode;
 
     auto& gs = GlobalState::getInstance();
+    bool was_active = gs.isRemoteControlActive();
 
-    if (now_active && !was_active) {
-        // 进入遥控模式: 保存快照 + 记录 saved_drv_mode_req, 不发任何请求, 不发急停
-        ROS_WARN("\033[31m[BT]\033[0m === Remote control ACTIVATED (drive_mode=%d) ===", drive_mode);
-        gs.setSavedDrvModeReq(gs.getCurrentDrvModeReq());
-        geometry_msgs::PoseStamped cur = gs.getCurrentPose();
-        gs.setRemoteControlSnapshot(gs.getWorkState(), cur);
-        gs.setRemoteControlActive(true);
-        TaskStatusReporter::instance().setState(TaskStatusReporter::REMOTE_CONTROL);
-        ROS_WARN("\033[31m[BT]\033[0m saved drv_mode_req=%d (current), pose=(%.2f, %.2f)",
-                 gs.getSavedDrvModeReq(),
-                 cur.pose.position.x, cur.pose.position.y);
-    } else if (!now_active && was_active) {
-        // 退出遥控模式: 仅设 recovering=true, 等 /taskoverstop 服务触发, 不发任何请求
-        ROS_WARN("\033[32m[BT]\033[0m === Remote control DEACTIVATED (drive_mode=%d) ===", drive_mode);
-        gs.setRemoteControlActive(false);
-        gs.setRemoteControlRecovering(true);
+    // ===== 调试: 每次回调都强制打印 =====
+    // 用 ros::Time.now() 作为本次回调的唯一序号（std_msgs/UInt8 没有 header）
+    static uint32_t cb_counter = 0;
+    uint32_t this_cb = ++cb_counter;
+    ROS_INFO("\033[36m[BT]\033[0m [VCU-CB#%u] drive_mode=%d was_active=%d",
+             this_cb, drive_mode, was_active);
+
+    if (drive_mode == 2) {
+        // ===== 进入遥控模式: 什么也不做, 只打印 =====
+        if (!was_active) {
+            gs.setRemoteControlActive(true);
+            // 清掉之前可能的 recovery 状态，避免状态机错乱
+            gs.setRemoteControlRecovering(false);
+            TaskStatusReporter::instance().setState(TaskStatusReporter::REMOTE_CONTROL);
+        }
+        ROS_INFO("\033[36m[BT]\033[0m === Remote control mode (drive_mode=2) ===");
+        return;
     }
+
+    // drive_mode == 0 (人工) 或 其他值 (如 1 自动)
+    if (!was_active) {
+        // 不在遥控模式, 仅记录当前档位
+        if (drive_mode == 0) {
+            ROS_INFO_THROTTLE(1.0, "\033[36m[BT]\033[0m === Manual drive mode (drive_mode=0) ===");
+        }
+        return;
+    }
+
+    // ===== 退出遥控模式 (drive_mode 从 2 切到 0 或其他) =====
+    // 需求: 退出遥控后:
+    //   drive_mode==0 (人工驾驶) → 不发急停, 仅做标志切换
+    //   drive_mode==1 (自动驾驶) → 立即发 5 次急停, 然后等待 /taskoverstop 决策
+    ROS_WARN("\033[31m[BT]\033[0m === Remote control DEACTIVATED (drive_mode=%d) ===", drive_mode);
+
+    if (drive_mode == 1) {
+        std_msgs::UInt8 estop_msg;
+        estop_msg.data = 1;  // 急停 ON
+        for (int i = 0; i < 5; ++i) {
+            estop_pub_.publish(estop_msg);
+        }
+        gs.setEmergencyStop(true);
+        ROS_WARN("\033[31m[BT]\033[0m E-Stop SENT (ACU_EStop=1 x5), waiting for /taskoverstop decision...");
+    } else if (drive_mode == 0) {
+        ROS_WARN("\033[33m[BT]\033[0m Remote control released to MANUAL (drive_mode=0), NO E-Stop sent, waiting for /taskoverstop...");
+    } else {
+        ROS_WARN("\033[33m[BT]\033[0m Remote control released to drive_mode=%d, NO E-Stop sent, waiting for /taskoverstop...", drive_mode);
+    }
+
+    gs.setRemoteControlActive(false);
+    gs.setRemoteControlRecovering(true);
 }
 
 void VcuDriveModeListener::drvModeReqCallback(const std_msgs::UInt8::ConstPtr& msg)
@@ -2324,6 +2358,7 @@ RecoverFromRemoteControl::RecoverFromRemoteControl(const std::string& name, cons
     : BT::StatefulActionNode(name, config), nh_("~")
 {
     task_ctrl_pub_ = nh_.advertise<shuju::TaskCtrl>("/task_ctrl", 1, true);
+    estop_pub_     = nh_.advertise<std_msgs::UInt8>("/ACU_EStop", 1, true);
     task_status_sub_ = nh_.subscribe("/vehicle/task_status", 1, &RecoverFromRemoteControl::taskStatusCallback, this);
 }
 
@@ -2334,6 +2369,7 @@ BT::NodeStatus RecoverFromRemoteControl::onStart()
     start_time_ = ros::Time::now();
     vehicle_idle_ = false;
     task_canceled_ = false;
+    emergency_sent_ = false;
 
     if (!gs.hasRemoteControlSnapshot()) {
         ROS_ERROR("\033[31m[BT]\033[0m No remote control snapshot available!");
@@ -2343,8 +2379,7 @@ BT::NodeStatus RecoverFromRemoteControl::onStart()
     snapshot_state_ = gs.getSnapshotWorkState();
 
     ROS_WARN("\033[36m[BT]\033[0m === Remote Control Recovery START ===");
-    ROS_WARN("\033[36m[BT]\033[0m Snapshot state: %d, saved drv_mode_req: %d",
-             snapshot_state_, gs.getSavedDrvModeReq());
+    ROS_WARN("\033[36m[BT]\033[0m Snapshot state: %d (will restore on mode=0)", snapshot_state_);
     ROS_WARN("\033[36m[BT]\033[0m Waiting for /taskoverstop service (forever)...");
 
     // 不论 snapshot 状态, 一律进入 RUNNING 永久等 /taskoverstop 服务
@@ -2362,44 +2397,49 @@ BT::NodeStatus RecoverFromRemoteControl::onRunning()
         return BT::NodeStatus::RUNNING;
     }
 
-    // 阶段 2: mode=0 恢复任务, 直接发 saved_drv_mode_req
+    // 阶段 2: mode=0 继续任务 → 解除急停 (连续发 5 次 ACU_EStop=0)
+    //         状态码恢复为接管前的 snapshot_state_
     if (mode == 0) {
-        int saved = gs.getSavedDrvModeReq();
-        ROS_WARN("\033[36m[BT]\033[0m takeover mode=0, restoring drv_mode_req=%d", saved);
-        gs.beginDrvModeConfirm(saved);
+        if (!emergency_sent_) {
+            std_msgs::UInt8 estop_msg;
+            estop_msg.data = 0;  // 急停 OFF (解除)
+            for (int i = 0; i < 5; ++i) {
+                estop_pub_.publish(estop_msg);
+            }
+            emergency_sent_ = true;
+            gs.setEmergencyStop(false);
+            ROS_WARN("\033[32m[BT]\033[0m takeover mode=0: E-Stop RELEASED (ACU_EStop=0 x5), restoring state=%d", snapshot_state_);
+        }
         gs.setRemoteControlRecovering(false);
         gs.clearRemoteControlSnapshot();
         TaskStatusReporter::instance().setState(snapshot_state_);
         return BT::NodeStatus::SUCCESS;
     }
 
-    // 阶段 3: mode=1 取消任务
-    //   - 发 taskID=0 到 /task_ctrl (planner 收到 current_id=0 进入停车模式)
-    //   - 等 vehicle_idle_
-    //   - 再发 saved_drv_mode_req
+    // 阶段 3: mode=1 新任务 → 给规划直接发 taskID=0 的目标
+    //         状态码置 1 (IDLE), 表示任务被取消
     if (mode == 1) {
         if (!task_canceled_) {
             shuju::TaskCtrl task_ctrl_msg;
-            task_ctrl_msg.taskID = 0;       // planner 收到 current_id=0 -> 进入停车模式
+            task_ctrl_msg.taskID = 0;       // planner 收到 current_id=0 -> 进入停车/无任务模式
             task_ctrl_msg.ctrlCmd = 0;
             task_ctrl_msg.timestamp = ros::Time::now().toSec();
             task_ctrl_pub_.publish(task_ctrl_msg);
             task_canceled_ = true;
-            ROS_WARN("\033[33m[BT]\033[0m takeover mode=1, sent taskID=0 to /task_ctrl");
+            ROS_WARN("\033[33m[BT]\033[0m takeover mode=1 (new task): sent taskID=0 to /task_ctrl");
             return BT::NodeStatus::RUNNING;
         }
 
+        // 发完之后等一拍 (一个 tick) 再退出, 让 planner 有时间处理
         if (!vehicle_idle_) {
-            ROS_INFO_THROTTLE(2.0, "\033[33m[BT]\033[0m Waiting for vehicle to become idle...");
+            ROS_INFO_THROTTLE(2.0, "\033[33m[BT]\033[0m Waiting for planner to handle taskID=0...");
             return BT::NodeStatus::RUNNING;
         }
 
-        int saved = gs.getSavedDrvModeReq();
-        ROS_WARN("\033[36m[BT]\033[0m vehicle idle, restoring drv_mode_req=%d", saved);
-        gs.beginDrvModeConfirm(saved);
         gs.setRemoteControlRecovering(false);
         gs.clearRemoteControlSnapshot();
-        TaskStatusReporter::instance().setState(snapshot_state_);
+        TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);  // 状态码置 1
+        ROS_WARN("\033[32m[BT]\033[0m takeover mode=1: planner cleared, state set to IDLE (1)");
         return BT::NodeStatus::SUCCESS;
     }
 
@@ -2411,6 +2451,7 @@ void RecoverFromRemoteControl::onHalted()
     ROS_WARN("\033[33m[BT]\033[0m RecoverFromRemoteControl halted");
     vehicle_idle_ = false;
     task_canceled_ = false;
+    emergency_sent_ = false;
 }
 
 void RegisterNodes(BT::BehaviorTreeFactory& factory, ros::NodeHandle& nh)

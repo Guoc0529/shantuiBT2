@@ -1044,6 +1044,7 @@ private:
     ros::Subscriber vcu_drive_mode_sub_;
     ros::Subscriber drv_mode_req_sub_;
     ros::Publisher  drv_mode_req_pub_;
+    ros::Publisher  estop_pub_;
     ros::Timer      drv_mode_confirm_timer_;
 
     int current_drive_mode_;
@@ -1085,10 +1086,12 @@ public:
 private:
     ros::NodeHandle nh_;
     ros::Publisher task_ctrl_pub_;
+    ros::Publisher estop_pub_;
     ros::Subscriber task_status_sub_;
     ros::Time start_time_;
     bool vehicle_idle_ = false;
     bool task_canceled_ = false;
+    bool emergency_sent_ = false;
     int  snapshot_state_ = 1;
 
     void taskStatusCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);

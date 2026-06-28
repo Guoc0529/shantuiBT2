@@ -1,9 +1,0 @@
-# Each field has a corresponding set_* flag to allow partial updates.
-
-bool set_max_direction_switches
-int32 max_direction_switches
-
-
----
-bool success
-string message

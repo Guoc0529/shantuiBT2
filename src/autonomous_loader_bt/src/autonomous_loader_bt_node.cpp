@@ -231,8 +231,8 @@ private:
         // /taskoverstop 服务 - 遥控恢复决策
         //   mode=0: 恢复之前任务
         //   mode=1: 取消当前任务 (发 taskID=0 到 /task_ctrl)
-        takeover_stop_service_ = nh_.advertiseService("/taskoverstop", &AutonomousLoaderBTNode::takeoverStopCallback, this);
-        ROS_INFO("\033[36m[BT]\033[0m Advertised service /taskoverstop for remote recovery decision");
+        takeover_stop_service_ = nh_.advertiseService("/takeoverstop", &AutonomousLoaderBTNode::takeoverStopCallback, this);
+        ROS_INFO("\033[36m[BT]\033[0m Advertised service /takeoverstop for remote recovery decision");
 
         // 避障相关话题订阅
         obstacle_1_sub_ = nh_.subscribe("/obstacle_1", 10, &AutonomousLoaderBTNode::obstacle1Callback, this);
