@@ -520,7 +520,8 @@ private:
                         gs.setObstacleCtrl3Immediate(false);
                         gs.setObstacleCtrl3Acknowledged(false);
                         publishNGear();
-                        ROS_WARN("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Obstacle stop RELEASED (ACU_EStop=0 x5, N gear x5), state=5->1");
+                        publishWorkStatePulse(8, 8, 1000);
+                        ROS_WARN("\033[33m[TaskCtrl]\033[0m ctrlCmd=5: Obstacle stop RELEASED (ACU_EStop=0 x5, N gear x5, workstate 8->1), state=5->1");
                     }
 
                     TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
@@ -622,8 +623,9 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
                 gs.setObstacleType(0);
                 gs.setRestoreRequested(false);
                 ROSTopicManager::getInstance().publishHazardLights(false);
+                publishWorkStatePulse(8, 8, 1000);
                 TaskStatusReporter::instance().setState(TaskStatusReporter::IDLE);
-                ROS_INFO("\033[36m[Obstacle]\033[0m /restore: Resume from obstacle_1/2, hazard off, state=1");
+                ROS_INFO("\033[36m[Obstacle]\033[0m /restore: Resume from obstacle_1/2, hazard off, workstate 8->1");
             } else {
                 ROS_WARN("\033[33m[Obstacle]\033[0m /restore: Ignored (no pending obstacle or ctrlCmd=3 source)");
             }
@@ -694,6 +696,26 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
         gear_msg.data = 2;  // 2 = N 档
         for (int i = 0; i < 5; ++i) drv_gear_pub_.publish(gear_msg);
         ROS_WARN("\033[36m[BT]\033[0m publishNGear: ACU_DrvGear=2 (N gear) x5");
+    }
+
+    // 异步发 /workstate=8 持续 hold_ms 毫秒，再发 /workstate=1（不阻塞当前回调）
+    void publishWorkStatePulse(int8_t hold_state, int8_t final_state, int hold_ms)
+    {
+        std_msgs::Int8 ws;
+        ws.data = hold_state;
+        nh_.setParam("/workstate", hold_state);
+        for (int i = 0; i < 5; ++i) workstate_pub_.publish(ws);
+        ROS_WARN("\033[36m[BT]\033[0m publishWorkStatePulse: /workstate=%d x5, holding %d ms then -> %d",
+                 hold_state, hold_ms, final_state);
+
+        std::thread([this, hold_state, final_state, hold_ms]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(hold_ms));
+            std_msgs::Int8 ws2;
+            ws2.data = final_state;
+            nh_.setParam("/workstate", final_state);
+            for (int i = 0; i < 5; ++i) workstate_pub_.publish(ws2);
+            ROS_WARN("\033[36m[BT]\033[0m publishWorkStatePulse: /workstate=%d x5 (post-hold)", final_state);
+        }).detach();
     }
 
     ros::NodeHandle& nh_;

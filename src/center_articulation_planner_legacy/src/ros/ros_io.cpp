@@ -21,12 +21,19 @@ namespace jhzx::center_articulation_planner
     setupServices();
     setupTimers();
     setupActionServer();
+    // --------------du------------------------
+    setDiagnosticOk("Idle");
+    // --------------du------------------------
 
     ROS_INFO("PlannerROS initialized.");
   }
 
   void RosIo::loadParameters()
   {    
+    // --------------du------------------------
+    pnh_.param<std::string>("diagnostic_topic", diagnostic_topic_, diagnostic_topic_);
+    pnh_.param<std::string>("diagnostic_name", diagnostic_name_, diagnostic_name_);
+    // --------------du------------------------
     pnh_.param<std::string>("reach_topic", reach_topic_, reach_topic_);
     pnh_.param<std::string>("is_forward_topic", is_forward_topic_, is_forward_topic_);
     pnh_.param<std::string>("global_path_topic", global_path_topic_, global_path_topic_);
@@ -59,6 +66,9 @@ namespace jhzx::center_articulation_planner
 
   void RosIo::setupPublishers()
   {
+    // --------------du------------------------
+    diag_pub_ = nh_.advertise<diagnostic_msgs::DiagnosticArray>(diagnostic_topic_, 1);
+    // --------------du------------------------
     path_pub_ = nh_.advertise<nav_msgs::Path>(global_path_topic_, 1);
     segmented_path_pub_ = nh_.advertise<nav_msgs::Path>(segmented_path_topic_, 1);
     local_path_pub_ = nh_.advertise<nav_msgs::Path>(local_path_topic_, 1);
@@ -108,6 +118,9 @@ namespace jhzx::center_articulation_planner
   {
     timer_ = nh_.createTimer(ros::Duration(0.2), &RosIo::timerCallback, this);
     moving_timer_ = nh_.createTimer(ros::Duration(0.05), &RosIo::movingTimerCallback, this, false, false);
+    // --------------du------------------------
+    diag_timer_ = nh_.createTimer(ros::Duration(1.0), &RosIo::diagnosticTimerCallback, this);
+    // --------------du------------------------
   }
 
   void RosIo::setupActionServer()
@@ -271,6 +284,42 @@ namespace jhzx::center_articulation_planner
       sub_map_.shutdown();
     }
   }
+
+  // --------------du------------------------
+  void RosIo::setDiagnosticOk(const std::string &message)
+  {
+    health_.level = diagnostic_msgs::DiagnosticStatus::OK;
+    health_.message = message.empty() ? "OK" : message;
+    health_.error_code = "0";
+    health_.last_update = ros::Time::now();
+  }
+
+  void RosIo::setDiagnosticError(const std::string &error_code, const std::string &message)
+  {
+    health_.level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    health_.message = message.empty() ? "ERROR" : message;
+    health_.error_code = error_code.empty() ? "0" : error_code;
+    health_.last_update = ros::Time::now();
+  }
+
+  void RosIo::diagnosticTimerCallback(const ros::TimerEvent &)
+  {
+    diagnostic_msgs::DiagnosticStatus st;
+    st.name = diagnostic_name_;
+    st.level = health_.level;
+    st.message = health_.message;
+
+    diagnostic_msgs::KeyValue kv;
+    kv.key = "error_code";
+    kv.value = health_.error_code;
+    st.values.push_back(kv);
+
+    diagnostic_msgs::DiagnosticArray arr;
+    arr.header.stamp = ros::Time::now();
+    arr.status.push_back(st);
+    diag_pub_.publish(arr);
+  }
+  // --------------du------------------------
 
   void RosIo::timerCallback(const ros::TimerEvent &)
   {

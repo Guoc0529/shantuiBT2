@@ -5,6 +5,10 @@
 #include <cstdint>
 
 #include <actionlib/server/simple_action_server.h>
+// --------------du------------------------
+#include <diagnostic_msgs/DiagnosticArray.h>
+#include <diagnostic_msgs/DiagnosticStatus.h>
+// --------------du------------------------
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Path.h>
@@ -51,6 +55,10 @@ namespace jhzx::center_articulation_planner
     void startMovingTimer();
     void stopMovingTimer();
     void shutdownMapSubscription();
+    // --------------du------------------------
+    void setDiagnosticOk(const std::string &message = "OK");
+    void setDiagnosticError(const std::string &error_code, const std::string &message);
+    // --------------du------------------------
     void publishActionResult(bool success,
                              double final_distance_error = 0.0,
                              double final_angle_error = 0.0,
@@ -64,6 +72,9 @@ namespace jhzx::center_articulation_planner
     void setupServices();
     void setupTimers();
     void setupActionServer();
+    // --------------du------------------------
+    void diagnosticTimerCallback(const ros::TimerEvent &event);
+    // --------------du------------------------
 
     void timerCallback(const ros::TimerEvent &event);
     void movingTimerCallback(const ros::TimerEvent &event);
@@ -89,6 +100,17 @@ namespace jhzx::center_articulation_planner
 
     ros::Timer timer_;
     ros::Timer moving_timer_;
+    // --------------du------------------------
+    ros::Timer diag_timer_;
+
+    struct ModuleHealth
+    {
+      int level{diagnostic_msgs::DiagnosticStatus::OK};
+      std::string message{"OK"};
+      std::string error_code{"0"};
+      ros::Time last_update;
+    } health_;
+    // --------------du------------------------
 
     ros::Subscriber sub_goal_;
     ros::Subscriber sub_reach_;
@@ -117,9 +139,16 @@ namespace jhzx::center_articulation_planner
     ros::Publisher is_unload_pub_;
     ros::Publisher controller_started_pub_;  // controller_started command publisher
     ros::Publisher drive_mode_pub_;          // drive_mode request publisher (inter-segment)
+    // --------------du------------------------
+    ros::Publisher diag_pub_;
+    // --------------du------------------------
 
     std::string planner_goal_topic_{"/planner_goal"};
 
+    // --------------du------------------------
+    std::string diagnostic_topic_{"/diagnostics"};
+    std::string diagnostic_name_{"Center Articulation Planner"};
+    // --------------du------------------------
     std::string plan_service_start_topic_{"/plan_service_start"};
     std::string plan_service_goal_topic_{"/plan_service_goal"};
     std::string map_topic_{"/map"};

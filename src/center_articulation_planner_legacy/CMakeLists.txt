@@ -31,6 +31,9 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   autonomous_loader_msgs
   hybrid_a_star
+  # --------------du------------------------
+  diagnostic_msgs
+  # --------------du------------------------
 )
 
 add_message_files(
@@ -55,6 +58,9 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES  center_articulation_planner_ros
   CATKIN_DEPENDS roscpp roslib actionlib actionlib_msgs my_msgs geometry_msgs nav_msgs std_msgs sensor_msgs tf2 tf2_geometry_msgs local_planner message_runtime autonomous_loader_msgs hybrid_a_star
+  # --------------du------------------------
+  diagnostic_msgs
+  # --------------du------------------------
 )
 
 add_library(center_articulation_planner_ros

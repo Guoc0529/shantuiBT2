@@ -29,7 +29,7 @@ namespace
   // Bring namespaced TaskType into this TU-local helper scope
   using jhzx::center_articulation_planner::TaskType;
   constexpr std::uint8_t kBrakeRelease = 0;
-  constexpr std::uint8_t kBrake30Percent = 77; // round(255 * 0.30)
+  constexpr std::uint8_t kBrake30Percent = 50; // round(255 * 0.30)
 
   // 状态机的纯内部helper，不在其他任何源文件中使�?
   const char *plannerStateToString(PlannerState state)
@@ -206,9 +206,9 @@ namespace jhzx::center_articulation_planner
         }
         ROS_INFO("Inter-segment: brake=%u (30%%) x5 sent",
                  static_cast<unsigned>(kBrake30Percent));
+        ros::Duration(1).sleep();
 
-        // Step 3: 刹车后等待 1 秒
-        ros::Duration(1.0).sleep();
+        // Step 3: 0 秒等待，直接走下一步
 
         // Step 4: drive_mode=1，连发 5 次
         for (int i = 0; i < 5; ++i)
@@ -710,6 +710,13 @@ namespace jhzx::center_articulation_planner
       ROS_INFO("%s", message.c_str());
     }
 
+    // --------------du------------------------
+    if (next_state != PlannerState::Error && ros_io_)
+    {
+      ros_io_->setDiagnosticOk(plannerStateToString(next_state));
+    }
+    // --------------du------------------------
+
     // 【优化】离开Moving状态时，确保发布controller_started=false
     if (previous == PlannerState::Moving && next_state != PlannerState::Moving)
     {
@@ -783,6 +790,28 @@ namespace jhzx::center_articulation_planner
     {
       final_error_msg_ = base_msg + ": " + detail;
     }
+
+    // --------------du------------------------
+    if (ros_io_)
+    {
+      switch (code)
+      {
+      case ErrorCode::PlanFailed:
+        ros_io_->setDiagnosticError("7101", final_error_msg_);
+        break;
+      case ErrorCode::BackendNull:
+      case ErrorCode::PlanServiceUnavailable:
+        ros_io_->setDiagnosticError("7102", final_error_msg_);
+        break;
+      case ErrorCode::NoDistanceFeedback:
+        ros_io_->setDiagnosticError("7103", final_error_msg_);
+        break;
+      default:
+        break;
+      }
+    }
+    // --------------du------------------------
+
     transitionTo(PlannerState::Error, final_error_msg_);
   }
 
@@ -847,7 +876,7 @@ namespace jhzx::center_articulation_planner
         {
           // Pile volume below threshold, shift goal in -x direction
           const double original_x = plan_goal.pose.position.x;
-          plan_goal.pose.position.y -= pile_low_offset_x_m_;
+          plan_goal.pose.position.x -= pile_low_offset_x_m_;
           plan_goal.header.stamp = ros::Time::now();
           goal_adjusted_for_pile_ = true;
 
@@ -1209,7 +1238,7 @@ namespace jhzx::center_articulation_planner
       if (volume >= 0 && volume < pile_low_threshold_percent_)
       {
         const double original_x = plan_goal.pose.position.x;
-        plan_goal.pose.position.y -= pile_low_offset_x_m_;
+        plan_goal.pose.position.x -= pile_low_offset_x_m_;
         plan_goal.header.stamp = ros::Time::now();
         goal_adjusted_for_pile = true;
 
@@ -1296,8 +1325,8 @@ namespace jhzx::center_articulation_planner
     const double yaw = tf2::getYaw(pose.pose.orientation);
     const double cos_yaw = std::cos(yaw);
     const double sin_yaw = std::sin(yaw);
-    pose.pose.position.x += forward_m * cos_yaw - lateral_m * sin_yaw;
-    pose.pose.position.y += forward_m * sin_yaw + lateral_m * cos_yaw;
+    pose.pose.position.x += forward_m * cos_yaw;
+    pose.pose.position.y += forward_m * sin_yaw;
   }
 
   void PlannerROS::applyUnloadPlanGoalOffset(geometry_msgs::PoseStamped &plan_goal)
