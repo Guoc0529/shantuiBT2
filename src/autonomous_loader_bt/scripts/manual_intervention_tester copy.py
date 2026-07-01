@@ -32,9 +32,10 @@ from autonomous_loader_msgs.msg import (
     NavigateAction,
     NavigateFeedback,
     NavigateResult,
+    TaskCommand,
 )
 from autonomous_loader_msgs.srv import spadingPose
-from shuju.srv import taskcontrol, taskcontrolRequest, cangdou, cangdouRequest
+from shuju.srv import taskcontrol, taskcontrolRequest
 
 # ----------------------- ctrlCmd 定义 ---------------------------
 CTRL_CMD_NAMES = {
@@ -44,16 +45,6 @@ CTRL_CMD_NAMES = {
     4: "紧急停车",
     5: "继续任务",
     6: "结束任务",
-}
-
-# ----------------------- cangdou type 定义 -----------------------
-# 参考 autonomous_loader_bt_node.cpp:
-#   type == 0 -> AUTO_WORKING (state=2)
-#   type != 0 -> TEMP_WORKING (state=3)
-CANGDOU_TYPE_NAMES = {
-    0: "AUTO (AUTO_WORKING=2)",
-    1: "TEMP (TEMP_WORKING=3)",
-    2: "TEMP (TEMP_WORKING=3)",
 }
 
 # ----------------------- 日志配置 ----------------------------
@@ -176,6 +167,7 @@ class ManualInterventionTester:
         self.nav_mock = nav_mock
         bt_ns = rospy.get_param("~bt_ns", "/autonomous_loader_bt_node").rstrip("/")
         self.bt_ns = bt_ns
+        self.task_pub = rospy.Publisher(f"{bt_ns}/scheduler/start_task", TaskCommand, queue_size=10, latch=True)
         self.end_pub  = rospy.Publisher(f"{bt_ns}/scheduler/end_task", Bool, queue_size=1)
         self.mi_pub   = rospy.Publisher("/autonomous_loader/manual_intervention_complete", Bool, queue_size=1)
         self.status_sub = rospy.Subscriber(f"{bt_ns}/state_machine/status", String, self._status_cb)
@@ -186,13 +178,6 @@ class ManualInterventionTester:
 
         # 服务 client
         self._spade_cli = rospy.ServiceProxy("/spadingPose", spadingPose)
-
-        # cangdou 服务客户端（命名空间: <bt_ns>/liaodou）。
-        # 注意：旧的 /<bt_ns>/scheduler/start_task topic 不再使用，
-        # 改为直接调 cangdou 服务。
-        # type==0 -> AUTO_WORKING(state=2)；type!=0 -> TEMP_WORKING(state=3)
-        self._cangdou_srv = rospy.ServiceProxy(f"{bt_ns}/liaodou", cangdou)
-        rospy.loginfo("cangdou service proxy to %s/liaodou", bt_ns)
 
         # 自动 ArmBucketState 完成
         self._abs_last_cmd = 0
@@ -221,27 +206,10 @@ class ManualInterventionTester:
             self.log.warning("/spadingPose call failed")
 
     # ----------- 键盘触发动作 -------------
-    def send_task(self, task_id:int, bin_id:int, hopper_id:int, task_type:int = 0):
-        """通过 /<bt_ns>/liaodou 服务（shuju/cangdou.srv）下发任务。
-        task_type:
-            0 -> AUTO  (state=2)
-            非0 -> TEMP (state=3)
-        """
-        req = cangdouRequest()
-        req.taskID = task_id
-        req.type   = int(task_type)
-        req.cang   = int(bin_id)
-        req.dou    = int(hopper_id)
-
-        try:
-            resp = self._cangdou_srv(req)
-            type_name = CANGDOU_TYPE_NAMES.get(int(task_type), f"TEMP(task_type={task_type})")
-            self.log.info(
-                "cangdou call: taskID=%d type=%d(%s) bin=%d hopper=%d -> huiying=%s",
-                req.taskID, req.type, type_name, req.cang, req.dou, resp.huiying,
-            )
-        except rospy.ServiceException as e:
-            self.log.error("cangdou service call failed: %s", e)
+    def send_task(self, task_id:int, bin_id:int, hopper_id:int):
+        msg = TaskCommand(task_id=task_id, bin_id=bin_id, hopper_id=hopper_id, task_type="scoop")
+        self.task_pub.publish(msg)
+        self.log.info("Sent Task #%d (bin=%d hopper=%d)", msg.task_id, msg.bin_id, msg.hopper_id)
 
     def send_end(self):
         self.end_pub.publish(Bool(data=True))
@@ -290,13 +258,10 @@ class ManualInterventionTester:
     # ----------- 帮助 -------------
     def _print_help(self):
         print("\n"+"="*60)
-        print("Manual Intervention + TaskCtrl + cangdou Tester")
+        print("Manual Intervention + TaskCtrl Tester")
         print("="*60)
         print("=== Task Commands ===")
-        print("  s : Send new Task via cangdou service (interactive)")
-        print("       -> prompts: nav mode / task_id / bin / hopper / type")
-        print("       -> type=0 -> AUTO_WORKING(state=2)")
-        print("       -> type!=0 -> TEMP_WORKING(state=3)")
+        print("  s : Send new Task (interactive)")
         print("  e : EndTask (via scheduler/end_task)")
         print("  m : Manual intervention done (auto NORMAL)")
         print()
@@ -335,24 +300,19 @@ def main():
                     # 暂时恢复终端，读取用户输入
                     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
                     try:
-                        print("\n--- Send New Task (via cangdou service) ---")
+                        print("\n--- Send New Task ---")
                         # 1. 选择导航模式
                         mode_in = input("Select nav mode [(f)atal, (r)ecoverable, (a)rrival_bad, (n)ormal]: ").lower()
                         if   mode_in == 'f': nav.set_mode(NavMode.PLAN_FAIL)
                         elif mode_in == 'r': nav.set_mode(NavMode.RECOVERABLE_FAIL)
                         elif mode_in == 'a': nav.set_mode(NavMode.BAD_ARRIVAL)
                         else: nav.set_mode(NavMode.NORMAL)
-
-                        # 2. 输入 task id / bin / hopper
+                        
+                        # 2. 输入 bin/hopper ID
                         ti = int(input("Enter task_id (0 to cancel): "))
                         bi = int(input("Enter bin_id  (1-3): "))
                         hi = int(input("Enter hopper_id (1-5): "))
-
-                        # 3. 选择 type: 0=AUTO, 1=TEMP（任何非0 都是 TEMP）
-                        type_in = input("Enter task_type [0=AUTO(state=2), 1=TEMP(state=3), default=0]: ").strip()
-                        task_type = int(type_in) if type_in else 0
-
-                        tester.send_task(ti, bi, hi, task_type)
+                        tester.send_task(ti, bi, hi)
 
                     except (ValueError, IndexError):
                         print("Invalid input, task cancelled.")

@@ -1360,14 +1360,14 @@ BT::NodeStatus SetArmBucketState::tick()
     // 发布动作状态（英文，用于topic发布）
     std::string status_msg;
     switch(code) {
-        case 1: status_msg = "1: 铲斗整形"; break;
-        case 2: status_msg = "2: 铲斗运输姿态"; break;
-        case 3: status_msg = "3: 铲斗找平"; break;
-        case 4: status_msg = "4: 机械臂抬起"; break;
-        case 5: status_msg = "5: 机械臂放下"; break;
+        case 1: status_msg = "1: 铲斗放平"; break;
+        case 2: status_msg = "2: 铲斗调整运输姿态"; break;
+        case 3: status_msg = "3: 铲斗调整到铲料姿态"; break;
+        case 4: status_msg = "4: 动臂抬起"; break;
+        case 5: status_msg = "5: 动臂放下"; break;
         case 6: status_msg = "6: 卸料中"; break;
         case 7: status_msg = "7: 铲装中"; break;
-        case 8: status_msg = "8: 卸料中"; break;
+        case 8: status_msg = "8: 抖料中"; break;
         default: status_msg = "机械臂/铲斗动作"; break;
     }
     ROSTopicManager::getInstance().publishActionStatus(status_msg);
@@ -1530,8 +1530,8 @@ BT::NodeStatus WaitForArmBucketCompletion::onRunning()
                 case 1: status_msg = "1: 铲斗已放至地面"; break;
                 case 2: status_msg = "2: 铲斗已抬至运输姿态"; break;
                 case 3: status_msg = "3: 铲斗已找平"; break;
-                case 4: status_msg = "4: 机械臂已抬起"; break;
-                case 5: status_msg = "5: 机械臂已放下"; break;
+                case 4: status_msg = "4: 动臂已抬起"; break;
+                case 5: status_msg = "5: 动臂已放下"; break;
                 case 6: status_msg = "6: 卸料完成"; break;
                 case 7: status_msg = "7: 铲装完成"; break;
                 case 8: status_msg = "8: 物料倾倒完成"; break;

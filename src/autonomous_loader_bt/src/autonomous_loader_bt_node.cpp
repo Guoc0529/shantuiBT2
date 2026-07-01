@@ -549,7 +549,7 @@ private:
     // ===== 避障相关回调函数 =====
     // obstacle_1/obstacle_2: 设置 obstacle_pending=true，等待任务完成后执行避障
 // 假设这是您处理 obstacle_1 话题的回调函数（请根据您实际的函数名进行对应修改）
-void obstacle1Callback(const std_msgs::Int8::ConstPtr& msg)
+void obstacle1Callback(const std_msgs::Bool::ConstPtr& msg)
 {
     if (msg->data == 1) // 假设数据为 1 表示触发避障
     {
@@ -578,7 +578,7 @@ void obstacle1Callback(const std_msgs::Int8::ConstPtr& msg)
 // 对于 obstacle_2_sub_, backstart_sub_ 的回调函数，也是完全一样的改法：
 // 只需要把 gs.setObstacleType(...) 里的数字换成对应的 2 或者 3 即可。
 // =====================================================================
-void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
+void obstacle2Callback(const std_msgs::Bool::ConstPtr& msg)
 {
     if (msg->data == 1)
     {
@@ -684,6 +684,9 @@ void obstacle2Callback(const std_msgs::Int8::ConstPtr& msg)
 
         // 根据任务类型设置工作状态
         int work_state = (req.type == 0) ? TaskStatusReporter::AUTO_WORKING : TaskStatusReporter::TEMP_WORKING;
+        // 同步 GlobalState.work_state_，否则 BT 树中 <SetWorkState/>（无 value）会
+        // fallback 读 GlobalState 的默认值 2，立即把刚设的 3 覆盖回 2。
+        gs.setWorkState(work_state);
         TaskStatusReporter::instance().setState(work_state);
         nh_.setParam("canggoal", static_cast<int>(req.cang));
         res.huiying = true;
